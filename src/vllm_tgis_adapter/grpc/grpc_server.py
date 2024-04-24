@@ -95,7 +95,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.engine: AsyncLLMEngine = engine
 
         # These set in _post_init()
-        self.tokenizer_group: BaseTokenizerGroup = None
         self.tokenizer: Union[PreTrainedTokenizer,
                               PreTrainedTokenizerFast] = None
         self.config: ModelConfig = None
