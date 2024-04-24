@@ -104,9 +104,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.skip_special_tokens = not args.output_special_tokens
         self.default_include_stop_seqs = args.default_include_stop_seqs
 
+    @property
+    def tokenizer_group(self) -> BaseTokenizerGroup:
+        return self.engine.engine.tokenizer
+
     async def _post_init(self):
         self.config = await self.engine.get_model_config()
-        self.tokenizer_group = await self.engine.get_tokenizer_group()
+
         self.tokenizer = await self.engine.get_tokenizer()
 
         # Swap in the special TGIS stats logger
