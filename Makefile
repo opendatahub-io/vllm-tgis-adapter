@@ -1,4 +1,3 @@
-
 target_path := "src/vllm_tgis_adapter/grpc/pb"
 gen-protos:
 	# Compile protos
@@ -8,3 +7,12 @@ gen-protos:
 		--grpc_python_out=$(target_path) --mypy_out=$(target_path) proto/generation.proto
 	find $(target_path)/ -type f -name "*.py" -print0 -exec sed -i -e 's/^\(import.*pb2\)/from . \1/g' {} \;
 	touch $(target_path)/__init__.py
+
+
+build-wheel: gen-protos
+	pip install build
+	pythom -m build
+
+
+all: build-wheel
+
