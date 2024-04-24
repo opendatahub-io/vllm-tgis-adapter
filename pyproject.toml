@@ -1,0 +1,123 @@
+[build-system]
+requires = ["setuptools>=48", "setuptools_scm[toml]>=6.3.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vllm-tgis-adapter"
+description = "vLLM adapter for a TGIS-compatible grpc server"
+readme = "README.md"
+license = {text = "Apache 2"}
+authors = [{name = "Daniele Trifirò", email = "dtrifiro@redhat.com"}]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Development Status :: 4 - Beta"
+]
+requires-python = ">=3.9"
+dynamic = ["version"]
+dependencies = [
+  "vllm==0.4.1",
+  "prometheus_client", # FIXME: add version
+  "grpcio",
+  "transformers",
+]
+
+# [project.scripts]
+# mainentrypoint= "vllm_tgis_adapter:main"
+
+[project.urls]
+Issues = "https://github.com/dtrifiro/vllm_tgis_adapter/issues"
+Source = "https://github.com/dtrifiro/vllm_tgis_adapter"
+[project.optional-dependencies]
+tests = [
+  "ruff",
+  "mypy",
+]
+dev = [
+  "vllm_tgis_adapter[tests]"
+]
+
+[tool.setuptools_scm]
+version_file = "src/vllm_tgis_adapter/_version.py"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+
+[tool.coverage.run]
+branch = true
+source = ["vllm_tgis_adapter", "tests"]
+
+[tool.coverage.paths]
+source = ["src", "*/site-packages"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+  "if typing.TYPE_CHECKING:",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "raise AssertionError",
+  "@overload"
+]
+
+[tool.mypy]
+# Error output
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+show_traceback = true
+pretty = true
+check_untyped_defs = false
+# Warnings
+warn_no_return = true
+warn_redundant_casts = true
+warn_unreachable = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = [
+]
+
+[tool.codespell]
+ignore-words-list = " "
+
+[tool.ruff]
+output-format = "full"
+show-fixes = true
+
+[tool.ruff.lint]
+ignore = [
+  "S101",  # assert
+  "PLR2004",  # magic-value-comparison
+  "PLW2901",  # redefined-loop-name
+  "ISC001",  # single-line-implicit-string-concatenation
+  "SIM105",  # suppressible-exception
+  "SIM108",  # if-else-block-instead-of-if-exp
+  "D100",  # Missing docstring in public module
+  "D103",  # Missing docstring in public function
+  "D104",  # Missing docstring in public package
+  "EM101",  # Exception must not use a string literal, assign to variable first
+  "D203",  # one blank line before class
+  "D213",  # multi-line-summary-second-line
+  "PTH123"  # open() should be replaced by Path.open
+]
+select = ["ALL"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "ARG001", "ARG002", "ANN"]
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["vllm_tgis_adapter"]
