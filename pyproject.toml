@@ -20,7 +20,6 @@ requires-python = ">=3.9"
 dynamic = ["version"]
 dependencies = [
   "vllm==0.4.1",
-  "flash-attn==v2.5.6",
   "prometheus_client==0.20.0",
   "grpcio==1.62.1",
   "transformers",
@@ -41,6 +40,13 @@ dev = [
   "vllm_tgis_adapter[tests]",
   "ruff==0.4.3",
   "mypy==1.10.0"
+]
+flash_attn = [
+  # it's easier to install flash-attn from wheel rather than like this as extra
+  # "https://github.com/Dao-AILab/flash-attention/releases/download/v2.5.6/flash_attn-2.5.6+cu118torch2.0cxx11abiFALSE-cp311-cp311-linux_x86_64.whl",
+  "flash-attn==2.5.3",
+  "packaging",  # FIXME: temporary, until https://github.com/Dao-AILab/flash-attention/pull/937 is released
+  "ninja"
 ]
 
 [tool.setuptools_scm]
