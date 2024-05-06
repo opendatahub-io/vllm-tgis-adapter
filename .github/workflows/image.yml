@@ -56,75 +56,76 @@ jobs:
           name: vllm-tgis
           path: /tmp/image.tar
 
-  kserve-smoke-test:
-    needs: build-image
+  # Temporarily disabled: need to make sure the runner can run vLLM (AVX512 instruction set or GPU)
+  # kserve-smoke-test:
+  #   needs: build-image
 
-    name: Kserve Smoke Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  #   name: Kserve Smoke Test
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Setup kind/kserve
-        uses: dtrifiro/setup-kserve@v0.0.2
-        with:
-          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
-          namespace: ${{ env.TEST_NS }}
+  #     - name: Setup kind/kserve
+  #       uses: dtrifiro/setup-kserve@v0.0.2
+  #       with:
+  #         cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+  #         namespace: ${{ env.TEST_NS }}
 
-      - name: Download built image
-        uses: actions/download-artifact@v4
+  #     - name: Download built image
+  #       uses: actions/download-artifact@v4
 
-      - name: Load built image into kind
-        run: |
-          kind load image-archive --name ${{ env.KIND_CLUSTER_NAME }} vllm-tgis/image.tar
+  #     - name: Load built image into kind
+  #       run: |
+  #         kind load image-archive --name ${{ env.KIND_CLUSTER_NAME }} vllm-tgis/image.tar
 
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          tool-cache: false
+  #     - name: Free Disk Space
+  #       uses: jlumbroso/free-disk-space@v1.3.1
+  #       with:
+  #         tool-cache: false
 
-      - name: Setup flan-t5-small model volume
-        run: |
-          sed 's|quay.io/dtrifiro/vllm-tgis:fast|${{ env.DEV_IMAGE }}|g' .github/test/kserve/setup.yaml | \
-            kubectl apply -f -
+  #     - name: Setup flan-t5-small model volume
+  #       run: |
+  #         sed 's|quay.io/dtrifiro/vllm-tgis:fast|${{ env.DEV_IMAGE }}|g' .github/test/kserve/setup.yaml | \
+  #           kubectl apply -f -
 
-          max_retries=10
-          wait_time=60s
-          until kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/setup-flan-t5-small --timeout ${wait_time}; do
-            echo "Current status:"
-            kubectl describe pod,pv,pvc
-            max_retries=$((max_retries-1))
-            if [[ $max_retries -le 0 ]]; then
-              echo "Failed to setup model"
-              kubectl logs pod/setup-flan-t5-small --all-containers
-              exit 1
-            fi
-            echo "-------------------"
-          done
+  #         max_retries=10
+  #         wait_time=60s
+  #         until kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/setup-flan-t5-small --timeout ${wait_time}; do
+  #           echo "Current status:"
+  #           kubectl describe pod,pv,pvc
+  #           max_retries=$((max_retries-1))
+  #           if [[ $max_retries -le 0 ]]; then
+  #             echo "Failed to setup model"
+  #             kubectl logs pod/setup-flan-t5-small --all-containers
+  #             exit 1
+  #           fi
+  #           echo "-------------------"
+  #         done
 
-      - name: Deploy ServingRuntime/InferenceService
-        run: |
-          sed 's|quay.io/opendatahub/vllm:fast|${{ env.DEV_IMAGE }}|g' .github/test/kserve/vllm-tgis.yaml | \
-            kubectl apply -f -
+  #     - name: Deploy ServingRuntime/InferenceService
+  #       run: |
+  #         sed 's|quay.io/opendatahub/vllm:fast|${{ env.DEV_IMAGE }}|g' .github/test/kserve/vllm-tgis.yaml | \
+  #           kubectl apply -f -
 
-          max_retries=10
-          wait_time=60s
-          until kubectl wait isvc/${ISVC_NAME} --for=condition=Ready --timeout=${wait_time}; do
-            echo "Current status:"
-            kubectl describe isvc,servingruntime,pod
-            max_retries=$((max_retries-1))
-            if [[ $max_retries -le 0 ]]; then
-              exit 1
-            fi
-            echo "-------------------"
-          done
+  #         max_retries=10
+  #         wait_time=60s
+  #         until kubectl wait isvc/${ISVC_NAME} --for=condition=Ready --timeout=${wait_time}; do
+  #           echo "Current status:"
+  #           kubectl describe isvc,servingruntime,pod
+  #           max_retries=$((max_retries-1))
+  #           if [[ $max_retries -le 0 ]]; then
+  #             exit 1
+  #           fi
+  #           echo "-------------------"
+  #         done
 
-      - name: Perform test inference (http)
-        run: |
-          export ISVC_URL="$(oc get isvc ${ISVC_NAME} -o jsonpath='{.status.components.predictor.url}')"
-          export ISVC_HOSTNAME=$(echo $ISVC_URL | cut -d/ -f3-)
-          echo "Querying ISVC at: ${ISVC_URL}"
+  #     - name: Perform test inference (http)
+  #       run: |
+  #         export ISVC_URL="$(oc get isvc ${ISVC_NAME} -o jsonpath='{.status.components.predictor.url}')"
+  #         export ISVC_HOSTNAME=$(echo $ISVC_URL | cut -d/ -f3-)
+  #         echo "Querying ISVC at: ${ISVC_URL}"
 
-          # We can't query the service via hostname, we need to add the entry to /etc/hosts
-          echo "127.0.0.1 ${ISVC_HOSTNAME}" | sudo tee -a /etc/hosts
+  #         # We can't query the service via hostname, we need to add the entry to /etc/hosts
+  #         echo "127.0.0.1 ${ISVC_HOSTNAME}" | sudo tee -a /etc/hosts
 
-          python examples/inference.py
+  #         python examples/inference.py
