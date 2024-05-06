@@ -145,6 +145,17 @@ select = ["ALL"]
   "ANN",  # annotations
   "TRY003"  # long messages outside exception class
 ]
+"examples/*" = [
+  "T201",
+  "D",
+  "ANN",
+  "TRY003",
+  'INP001',
+  "PTH109",
+  "EM101",
+  "BLE001",
+  "PLR0913"
+]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true

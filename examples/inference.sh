@@ -1,11 +1,13 @@
 #!/bin/bash
+set -euxo pipefail
 
 GRPC_HOSTNAME=localhost
 GRPC_PORT=8033
 
+# replace -insecure with -plaintext if using not using TLS
 grpcurl -v \
 	-plaintext \
-	-proto ../generation.proto \
+	-proto src/vllm_tgis_adapter/grpc/pb/generation.proto \
 	-d '{
     "requests": [
       {

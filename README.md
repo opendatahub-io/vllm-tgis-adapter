@@ -16,6 +16,10 @@ This will start serving a grpc server on port 8033. This can be queried with grp
 bash examples/inference.sh
 ```
 
+### Inference
+
+See [examples](/examples)
+
 ## Contributing
 
 Set up [`pre-commit`](https://pre-commit.com) for linting/style/misc fixes:
