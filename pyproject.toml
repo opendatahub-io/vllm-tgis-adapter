@@ -20,26 +20,27 @@ requires-python = ">=3.9"
 dynamic = ["version"]
 dependencies = [
   "vllm==0.4.1",
-  "prometheus_client", # FIXME: add version
-  "grpcio",
+  "flash-attn==v2.5.6",
+  "prometheus_client==0.20.0",
+  "grpcio==1.62.1",
   "transformers",
+  "accelerate==0.28.0",
+  "hf-transfer==0.1.6"
 ]
-
-# [project.scripts]
-# mainentrypoint= "vllm_tgis_adapter:main"
 
 [project.urls]
 Issues = "https://github.com/dtrifiro/vllm_tgis_adapter/issues"
 Source = "https://github.com/dtrifiro/vllm_tgis_adapter"
+
 [project.optional-dependencies]
 tests = [
-  "ruff",
-  "mypy",
   "pytest==8.2.0",
   "pytest-cov==5.0.0"
 ]
 dev = [
-  "vllm_tgis_adapter[tests]"
+  "vllm_tgis_adapter[tests]",
+  "ruff==0.4.3",
+  "mypy==1.10.0"
 ]
 
 [tool.setuptools_scm]
