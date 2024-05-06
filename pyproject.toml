@@ -1,5 +1,12 @@
 [build-system]
-requires = ["setuptools>=48", "setuptools_scm[toml]>=6.3.1"]
+requires = [
+  "setuptools>=48",
+  "setuptools_scm[toml]>=6.3.1",
+  # protobuf-generation tools
+  "grpcio-tools==1.62.1",
+  "mypy-protobuf==3.5.0",
+  "types-protobuf>=3.20.4"
+]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -55,6 +62,11 @@ version_file = "src/vllm_tgis_adapter/_version.py"
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = false
+
+[tool.setuptools.package-data]
+vllm_tgis_adapter = [
+  "**/*.proto"
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -115,15 +127,24 @@ ignore = [
   "D100",  # Missing docstring in public module
   "D103",  # Missing docstring in public function
   "D104",  # Missing docstring in public package
-  "EM101",  # Exception must not use a string literal, assign to variable first
+  "EM102",  # Exception must not use a string literal, assign to variable first
   "D203",  # one blank line before class
   "D213",  # multi-line-summary-second-line
-  "PTH123"  # open() should be replaced by Path.open
+  "PTH123",  # open() should be replaced by Path.open
+  # formatting
+  "COM812"
 ]
 select = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "ARG001", "ARG002", "ANN"]
+"setup.py" = [
+  "T201",  # print() use
+  "S603",  # subprocess call: check for execution of untrusted input
+  "D",  # docs
+  "ANN",  # annotations
+  "TRY003"  # long messages outside exception class
+]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true

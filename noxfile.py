@@ -42,7 +42,9 @@ def safety(session: nox.Session) -> None:
 @nox.session(python=versions)
 def build(session: nox.Session) -> None:
     session.install("build", "setuptools", "twine")
+
     session.run("python", "-m", "build")
+
     dists = Path("dist").glob("*")
     session.run("twine", "check", *dists, silent=True)
 
