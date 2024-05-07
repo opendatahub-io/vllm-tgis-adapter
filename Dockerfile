@@ -20,6 +20,7 @@ ARG PYTHON_VERSION
 ENV VIRTUAL_ENV=/opt/vllm
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+# hadolint ignore=DL3041
 RUN microdnf install -y \
     git \
     python${PYTHON_VERSION}-devel python${PYTHON_VERSION}-pip python${PYTHON_VERSION}-wheel && \
@@ -70,6 +71,7 @@ ENV VIRTUAL_ENV=/opt/vllm
 ENV PATH=$VIRTUAL_ENV/bin/:$PATH
 
 # Triton needs a CC compiler
+# hadolint ignore=DL3041
 RUN microdnf install -y gcc \
     && microdnf clean all
 
