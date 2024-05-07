@@ -16,6 +16,10 @@ This will start serving a grpc server on port 8033. This can be queried with grp
 bash examples/inference.sh
 ```
 
+### Docker
+
+Image available at [quay.io/dtrifiro/vllm-tgis](https://quay.io/dtrifiro/vllm-tgis)
+
 ### Inference
 
 See [examples](/examples)
