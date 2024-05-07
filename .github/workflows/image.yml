@@ -22,6 +22,7 @@ env:
 
 jobs:
   build-image:
+    timeout-minutes: 20
     name: "Build image"
     runs-on: ubuntu-latest
     steps:
