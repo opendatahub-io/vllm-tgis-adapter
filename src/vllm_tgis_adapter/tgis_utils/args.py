@@ -1,5 +1,6 @@
 import argparse
 import os
+from typing import Any
 
 from vllm.logger import init_logger
 
@@ -8,24 +9,29 @@ from vllm_tgis_adapter.grpc.validation import MAX_TOP_N_TOKENS
 logger = init_logger(__name__)
 
 
-def _to_env_var(arg_name: str):
+def _to_env_var(arg_name: str) -> str:
     return arg_name.upper().replace("-", "_")
 
 
 class EnvVarArgumentParser(argparse.ArgumentParser):
-    """Allows env var fallback for all args"""
+    """Allows env var fallback for all args."""
 
     class _EnvVarHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
-        def _get_help_string(self, action):
-            help = super()._get_help_string(action)
+        def _get_help_string(self, action: argparse.Action) -> str:
+            help_ = super()._get_help_string(action)
             if action.dest != "help":
-                help += f" [env: {_to_env_var(action.dest)}]"
-            return help
+                help_ += f" [env: {_to_env_var(action.dest)}]"
+            return help_
 
-    def __init__(self, *, formatter_class=_EnvVarHelpFormatter, **kwargs):
+    def __init__(
+        self,
+        *,
+        formatter_class: argparse.ArgumentDefaultsHelpFormatter = _EnvVarHelpFormatter,
+        **kwargs: dict[str, Any],
+    ):
         super().__init__(formatter_class=formatter_class, **kwargs)
 
-    def _add_action(self, action):
+    def _add_action(self, action: argparse.Action) -> argparse.Action:
         val = os.environ.get(_to_env_var(action.dest))
         if val:
             if action.type == bool:
@@ -88,7 +94,7 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     return parser
 
 
-def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:
+def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:  # noqa: C901
     if args.model_name:
         args.model = args.model_name
     if args.max_sequence_length is not None:

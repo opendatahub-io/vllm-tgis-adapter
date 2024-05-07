@@ -21,7 +21,6 @@ from vllm.utils import random_uuid
 
 TIMEOUT_KEEP_ALIVE = 5  # seconds.
 app = FastAPI()
-engine = None
 
 
 @app.get("/health")
@@ -100,7 +99,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     engine_args = AsyncEngineArgs.from_cli_args(args)
     engine = AsyncLLMEngine.from_engine_args(
-        engine_args, usage_context=UsageContext.API_SERVER
+        engine_args,
+        usage_context=UsageContext.API_SERVER,
     )
 
     app.root_path = args.root_path

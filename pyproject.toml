@@ -125,18 +125,37 @@ ignore = [
   "SIM105",  # suppressible-exception
   "SIM108",  # if-else-block-instead-of-if-exp
   "D100",  # Missing docstring in public module
+  "D101",  # Missing docstring in public class
+  "D102",  # Missing docstring in public method
   "D103",  # Missing docstring in public function
   "D104",  # Missing docstring in public package
+  "D107",  # Missing docstring in init
   "EM102",  # Exception must not use a string literal, assign to variable first
   "D203",  # one blank line before class
   "D213",  # multi-line-summary-second-line
   "PTH123",  # open() should be replaced by Path.open
+  "ANN204",  # missing  issing return type annotation for special method `__init__`
+  "EM101",  # Exception must not use a string literal, assign to variable first
+  "ANN101",  # missing type annotation for `self` (deprecated, will be removed)
+  "TRY003",  # Avoid specifying long messages outside the exception class
+  "TD",  # todo messages
+  "FIX",  # todo messages
+  "ERA001",  # commented out code
   # formatting
   "COM812"
 ]
 select = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+"*src/vllm_tgis_adapter/grpc/grpc_server.py" = [
+  "N802",  # name should be lowercase
+  "ERA001"  # Found commented-out code
+]
+"src/vllm_tgis_adapter/api_server.py" = [
+  "D205"  # docstring
+]
+"src/vllm_tgis_adapter/_version.py" = ["ALL"]
 "tests/**" = ["S", "ARG001", "ARG002", "ANN"]
 "setup.py" = [
   "T201",  # print() use

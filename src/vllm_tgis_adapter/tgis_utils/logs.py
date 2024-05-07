@@ -1,7 +1,6 @@
-"""Some methods for producing logs similar to TGIS"""
+"""Some methods for producing logs similar to TGIS."""
 
 import logging
-from typing import List
 
 from google.protobuf import text_format
 from vllm import RequestOutput
@@ -13,8 +12,8 @@ from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
 )
 
 
-def log_response(
-    inputs: List[str],
+def log_response(  # noqa: PLR0913
+    inputs: list[str],
     params: Parameters,
     prefix_id: str,
     response: GenerationResponse,
@@ -23,8 +22,8 @@ def log_response(
     kind_log: str,
     method_str: str,
     logger: logging.Logger,
-):
-    """Logs responses similar to how the TGIS server does"""
+) -> None:
+    """Log responses similar to how the TGIS server does."""
     # This time contains both request validation and tokenization
     tokenization_time = engine_response.metrics.arrival_time - start_time
     inference_time = (
@@ -60,21 +59,24 @@ def log_response(
         level = logging.INFO
     logger.log(
         level,
-        f"{span_str}: {kind_log} generated "
-        f"{response.generated_token_count} tokens before "
-        f"{stop_reason_str}, output {output_len} chars: "
-        f"{short_output}",
+        "%s: %s generated %d tokens before %s output %d chars: %s",
+        span_str,
+        kind_log,
+        response.generated_token_count,
+        stop_reason_str,
+        output_len,
+        short_output,
     )
 
 
 def _truncate(text: str, len_: int) -> bytes:
-    """Truncates a string and escapes control characters"""
+    """Truncate a string and escape control characters."""
     text = f"{text:.{len_}}..." if len(text) > len_ else text
     return text.encode("unicode_escape")
 
 
 def _safe_div(a: float, b: float, *, default: float = 0.0) -> float:
-    """Simple safe division with a default answer for divide-by-zero."""
+    """Simple safe division with a default answer for divide-by-zero."""  # noqa: D401
     try:
         return a / b
     except ZeroDivisionError:

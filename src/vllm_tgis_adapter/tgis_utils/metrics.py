@@ -1,6 +1,4 @@
-"""Implements the logging for all tgi_* metrics for compatibility
-with TGIS opsviz
-"""
+"""Implements the logging for all tgi_* metrics for compatibility with TGIS opsviz."""
 
 from enum import StrEnum, auto
 
@@ -74,27 +72,25 @@ class ServiceMetrics:
             buckets=_duration_buckets,
         )
 
-    def observe_tokenization_request(self, request: BatchedTokenizeRequest):
+    def observe_tokenization_request(self, request: BatchedTokenizeRequest) -> None:
         self.tgi_tokenize_request_input_count.inc(len(request.requests))
 
-    def observe_tokenization_response(self, response: BatchedTokenizeResponse):
+    def observe_tokenization_response(self, response: BatchedTokenizeResponse) -> None:
         for tokenize_response in response.responses:
             self.tgi_tokenize_request_tokens.observe(tokenize_response.token_count)
 
-    def count_generate_request(self, num_requests: int = 1):
+    def count_generate_request(self, num_requests: int = 1) -> None:
         self.tgi_request_input_count.inc(num_requests)
 
-    def observe_queue_time(self, engine_output: RequestOutput):
+    def observe_queue_time(self, engine_output: RequestOutput) -> None:
         self.tgi_request_queue_duration.observe(engine_output.metrics.time_in_queue)
 
-    def count_request_failure(self, reason: FailureReasonLabel):
+    def count_request_failure(self, reason: FailureReasonLabel) -> None:
         self.tgi_request_failure.labels({"err": reason}).inc(1)
 
 
 class TGISStatLogger(StatLogger):
-    """Instance wraps the vLLM StatLogger to report TGIS metric names
-    for compatibility
-    """
+    """Wraps the vLLM StatLogger to report TGIS metric names for compatibility."""
 
     def __init__(self, vllm_stat_logger: StatLogger, max_sequence_len: int):
         # Not calling super-init because we're wrapping and delegating to

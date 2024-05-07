@@ -17,6 +17,7 @@ logger = init_logger(__name__)
 
 async def grpc_server(
     async_llm_engine: AsyncLLMEngine,
+    *,
     disable_log_stats: bool,
 ) -> None:
     async def _force_log() -> None:
@@ -25,7 +26,7 @@ async def grpc_server(
             await engine.do_log_stats()
 
     if not disable_log_stats:
-        asyncio.create_task(_force_log())
+        asyncio.create_task(_force_log())  # noqa: RUF006
 
     assert args is not None
 
@@ -47,8 +48,8 @@ if __name__ == "__main__":
     args = postprocess_tgis_args(parser.parse_args())
     assert args is not None
 
-    logger.info(f"vLLM API grpc server version {vllm.__version__}")
-    logger.info(f"args: {args}")
+    logger.info("vLLM API grpc server version %s", vllm.__version__)
+    logger.info("args: %s", args)
 
     if args.served_model_name is not None:
         served_model_names = args.served_model_name

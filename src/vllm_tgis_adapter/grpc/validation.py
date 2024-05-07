@@ -15,7 +15,8 @@ STRICT_PARAMETER_VALIDATION = False
 
 
 class TGISValidationError(str, Enum):
-    """This enum holds all TGIS parameter validation failure cases.
+    """Holds all TGIS parameter validation failure cases.
+
     See the equivalent enumeration in TGIS here:
     https://github.ibm.com/ai-foundation/fmaas-inference-server/blob/main/router/src/validation.rs#L238-L271
     """
@@ -49,13 +50,17 @@ class TGISValidationError(str, Enum):
     # Additions that are _not_ in TGIS
     TopN = "top_n_tokens ({0}) must be <= {1}"
 
-    def error(self, *args, **kwargs):
-        """Raises a ValueError with a nicely formatted string"""
+    def error(self, *args, **kwargs) -> Exception:  # noqa: ANN002,ANN003
+        """Raise a ValueError with a nicely formatted string."""
         raise ValueError(self.value.format(*args, **kwargs))
 
 
-def validate_input(sampling_params: SamplingParams, token_num: int, max_model_len: int):
-    """Raises a ValueError if the input was too long"""
+def validate_input(
+    sampling_params: SamplingParams,
+    token_num: int,
+    max_model_len: int,
+) -> None:
+    """Raise ValueError if the input is too long."""
     # TODO: add in the prefix length once soft prompt tuning is supported
     if token_num >= max_model_len:
         TGISValidationError.InputLength2.error(token_num, 0, max_model_len)
@@ -66,10 +71,11 @@ def validate_input(sampling_params: SamplingParams, token_num: int, max_model_le
         )
 
 
-def validate_params(params: Parameters, max_max_new_tokens: int):
-    """Raises a ValueError from the TGISValidationError enum
-    if Parameters is invalid
-    """
+def validate_params(  # noqa: C901
+    params: Parameters,
+    max_max_new_tokens: int,
+) -> None:
+    """Raise ValueError from the TGISValidationError enum if Parameters is invalid."""
     # TODO: split into checks that are covered by vllm.SamplingParams
     # vs. checks that are not
 
