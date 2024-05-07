@@ -60,7 +60,7 @@ RUN --mount=type=bind,source=.git,target=.git \
 
 FROM base AS deploy
 ARG flash_attn_version=2.5.8
-ARG cuda_version=122
+ARG cuda_version_flashattn=122
 ARG torch_version=2.1
 
 WORKDIR /workspace
@@ -76,7 +76,8 @@ RUN microdnf install -y gcc \
     && microdnf clean all
 
 ENV FLASH_ATTN_VERSION=${flash_attn_version}
-ENV CUDA_VERSION=${cuda_version}
+ENV CUDA_VERSION_FLASHATTN=${cuda_version_flashattn}
+ENV CUDA_VERSION="12.0.0"
 ENV TORCH_VERSION=${torch_version}
 
 
@@ -85,7 +86,7 @@ ENV TORCH_VERSION=${torch_version}
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,from=build,src=/workspace/dist/,target=/workspace/dist/ \
     pip install \
-        https://github.com/Dao-AILab/flash-attention/releases/download/v${FLASH_ATTN_VERSION}/flash_attn-${FLASH_ATTN_VERSION}+cu${CUDA_VERSION}torch${TORCH_VERSION}cxx11abiFALSE-cp311-cp311-linux_x86_64.whl \
+        https://github.com/Dao-AILab/flash-attention/releases/download/v${FLASH_ATTN_VERSION}/flash_attn-${FLASH_ATTN_VERSION}+cu${CUDA_VERSION_FLASHATTN}torch${TORCH_VERSION}cxx11abiFALSE-cp311-cp311-linux_x86_64.whl \
         dist/*whl
 
 ENV HF_HUB_OFFLINE=1 \
