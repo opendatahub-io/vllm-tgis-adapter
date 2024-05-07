@@ -2,46 +2,59 @@ import argparse
 import inspect
 import time
 import uuid
-from typing import (Any, AsyncIterator, Dict, List, MutableSequence, Optional,
-                    Tuple, Union)
+from collections.abc import AsyncIterator, MutableSequence
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import grpc
 from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc.aio import ServicerContext
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-
-from vllm import (AsyncLLMEngine, CompletionOutput, RequestOutput,
-                  SamplingParams)
+from vllm import AsyncLLMEngine, CompletionOutput, RequestOutput, SamplingParams
 from vllm.config import ModelConfig
+
 # yapf: disable
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.logger import init_logger
 from vllm.sequence import Logprob
 from vllm.transformers_utils.tokenizer_group import BaseTokenizerGroup
 
-
-from .validation import validate_input, validate_params
-from .pb import generation_pb2_grpc
-from .pb.generation_pb2 import (BatchedGenerationRequest,
-                                                     BatchedGenerationResponse,
-                                                     BatchedTokenizeRequest,
-                                                     BatchedTokenizeResponse,
-                                                     DecodingMethod,
-                                                     GenerationResponse,
-                                                     ModelInfoRequest,
-                                                     ModelInfoResponse,
-                                                     Parameters,
-                                                     ResponseOptions,
-                                                     SingleGenerationRequest,
-                                                     StopReason, TokenInfo,
-                                                     TokenizeResponse)
-
-from vllm_tgis_adapter.tgis_utils.metrics import (FailureReasonLabel, ServiceMetrics,
-                                     TGISStatLogger)
 from vllm_tgis_adapter.tgis_utils import logs
-from vllm_tgis_adapter.tgis_utils.logits_processors import (ExpDecayLengthPenaltyWarper,
-                                               TypicalLogitsWarperWrapper)
+from vllm_tgis_adapter.tgis_utils.logits_processors import (
+    ExpDecayLengthPenaltyWarper,
+    TypicalLogitsWarperWrapper,
+)
+from vllm_tgis_adapter.tgis_utils.metrics import (
+    FailureReasonLabel,
+    ServiceMetrics,
+    TGISStatLogger,
+)
+
+from .pb import generation_pb2_grpc
+from .pb.generation_pb2 import (
+    BatchedGenerationRequest,
+    BatchedGenerationResponse,
+    BatchedTokenizeRequest,
+    BatchedTokenizeResponse,
+    DecodingMethod,
+    GenerationResponse,
+    ModelInfoRequest,
+    ModelInfoResponse,
+    Parameters,
+    ResponseOptions,
+    SingleGenerationRequest,
+    StopReason,
+    TokenInfo,
+    TokenizeResponse,
+)
+from .validation import validate_input, validate_params
 
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
@@ -60,11 +73,10 @@ async def _handle_exception(e: Exception, func, *args, **kwargs):
             logger.exception(f"{func.__name__} caused GPU OOM error")
             service_metrics.count_request_failure(FailureReasonLabel.OOM)
             await context.abort(StatusCode.RESOURCE_EXHAUSTED, str(e))
+        elif "generate" in func.__name__.lower():
+            service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
         else:
-            if "generate" in func.__name__.lower():
-                service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
-            else:
-                service_metrics.count_request_failure(FailureReasonLabel.UNKNOWN)
+            service_metrics.count_request_failure(FailureReasonLabel.UNKNOWN)
         logger.exception(f"{func.__name__} failed")
     raise e
 
@@ -323,7 +335,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     async def _validate_and_convert_params(
             self, params: Parameters, context: ServicerContext
     ) -> Tuple[SamplingParams, Optional[float]]:
-        """ Returns (sampling_params, deadline) """
+        """Returns (sampling_params, deadline)"""
         # First run TGIS validation to raise errors that match the TGIS api
         try:
             validate_params(params, self.max_max_new_tokens)
@@ -419,7 +431,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     @staticmethod
     def _convert_reason(output: CompletionOutput, max_is_token_limit: bool,
-                        time_limit_reached: bool) -> Tuple['StopReason', str]:
+                        time_limit_reached: bool) -> Tuple["StopReason", str]:
         finish_reason = output.finish_reason
         stop_sequence = None
         if finish_reason is None:

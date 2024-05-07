@@ -1,12 +1,9 @@
-import argparse
 import asyncio
 
 import vllm
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
-from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
-from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
 from vllm.logger import init_logger
 from vllm.usage.usage_lib import UsageContext
 
@@ -44,13 +41,11 @@ async def grpc_server(
         logger.info("gRPC server stopped")
 
 
-
 if __name__ == "__main__":
     parser = make_arg_parser()
     parser = add_tgis_args(parser)
     args = postprocess_tgis_args(parser.parse_args())
     assert args is not None
-
 
     logger.info(f"vLLM API grpc server version {vllm.__version__}")
     logger.info(f"args: {args}")
