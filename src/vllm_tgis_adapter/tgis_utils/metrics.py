@@ -127,8 +127,8 @@ class TGISStatLogger(StatLogger):
             buckets=sequence_len_buckets,
         )
 
-    def info(self, type: str, obj: object) -> None:
-        self._vllm_stat_logger.info(type, object)
+    def info(self, type_: str, obj: object) -> None:
+        self._vllm_stat_logger.info(type_, obj)
 
     def log(self, stats: Stats) -> None:
         # First, log the vLLM stats
