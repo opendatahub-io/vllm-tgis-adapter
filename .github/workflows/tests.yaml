@@ -57,3 +57,9 @@ jobs:
 
       - name: Build package
         run: nox -s build-${{ matrix.pyv }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vllm-tgis-wheel
+          path: dist/vllm_tgis_adapter*.whl
