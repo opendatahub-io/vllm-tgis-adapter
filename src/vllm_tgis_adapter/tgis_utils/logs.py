@@ -25,12 +25,17 @@ def log_response(  # noqa: PLR0913
 ) -> None:
     """Log responses similar to how the TGIS server does."""
     # This time contains both request validation and tokenization
+    assert engine_response.metrics is not None
+    assert engine_response.metrics.first_scheduled_time is not None
+
     tokenization_time = engine_response.metrics.arrival_time - start_time
     inference_time = (
         engine_response.metrics.last_token_time
         - engine_response.metrics.first_scheduled_time
     )
     queue_time = engine_response.metrics.time_in_queue
+    assert queue_time is not None
+
     time_per_token = _safe_div(inference_time, response.generated_token_count)
     total_time = engine_response.metrics.last_token_time - start_time
     output_len = len(response.text)

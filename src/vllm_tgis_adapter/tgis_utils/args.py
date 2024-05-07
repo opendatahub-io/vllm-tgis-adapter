@@ -1,6 +1,5 @@
 import argparse
 import os
-from typing import Any
 
 from vllm.logger import init_logger
 
@@ -19,6 +18,8 @@ class EnvVarArgumentParser(argparse.ArgumentParser):
     class _EnvVarHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
         def _get_help_string(self, action: argparse.Action) -> str:
             help_ = super()._get_help_string(action)
+            assert help_ is not None
+
             if action.dest != "help":
                 help_ += f" [env: {_to_env_var(action.dest)}]"
             return help_
@@ -26,8 +27,10 @@ class EnvVarArgumentParser(argparse.ArgumentParser):
     def __init__(
         self,
         *,
-        formatter_class: argparse.ArgumentDefaultsHelpFormatter = _EnvVarHelpFormatter,
-        **kwargs: dict[str, Any],
+        formatter_class: type[
+            argparse.ArgumentDefaultsHelpFormatter
+        ] = _EnvVarHelpFormatter,
+        **kwargs,  # noqa: ANN003
     ):
         super().__init__(formatter_class=formatter_class, **kwargs)
 
@@ -35,10 +38,10 @@ class EnvVarArgumentParser(argparse.ArgumentParser):
         val = os.environ.get(_to_env_var(action.dest))
         if val:
             if action.type == bool:
-                val = val.lower() == "true" or val == "1"
+                action.default = val.lower() == "true" or val == "1"
+
             elif action.type == int:
-                val = int(val)
-            action.default = val
+                action.default = int(val)
 
         return super()._add_action(action)
 

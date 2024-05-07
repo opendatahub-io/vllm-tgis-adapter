@@ -46,7 +46,8 @@ tests = [
 dev = [
   "vllm_tgis_adapter[tests]",
   "ruff==0.4.3",
-  "mypy==1.10.0"
+  "mypy==1.10.0",
+  "types-protobuf==5.26.0.20240422"
 ]
 flash_attn = [
   # it's easier to install flash-attn from wheel rather than like this as extra
@@ -107,6 +108,7 @@ files = ["src", "tests"]
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
+  "grpc"
 ]
 
 [tool.codespell]

@@ -3,17 +3,18 @@ from __future__ import annotations
 import inspect
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     TypeVar,
 )
 
 import grpc
 from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
-from vllm import SamplingParams
+from vllm import AsyncLLMEngine, SamplingParams
+from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.logger import init_logger
 
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 
     from grpc.aio import ServicerContext
     from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-    from vllm import AsyncLLMEngine, CompletionOutput, RequestOutput
+    from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
     from vllm.sequence import Logprob
     from vllm.transformers_utils.tokenizer_group import BaseTokenizerGroup
@@ -62,9 +63,8 @@ if TYPE_CHECKING:
     )
 
 _T = TypeVar("_T")
-_A = TypeVar("_A")
-_R = TypeVar("_R")
-_E = TypeVar("_E", Exception)
+_F = TypeVar("_F", Callable, Coroutine)
+_E = TypeVar("_E")
 
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
@@ -79,14 +79,17 @@ async def _handle_exception(
     func: Callable,
     *args: tuple[Any],
     **kwargs: dict[str, Any],
-) -> _E:
+) -> None:
     # We don't log AbortErrors since these correspond to gRPC errors
     # intentionally raised during handling of requests.
     if not isinstance(e, AbortError):
-        if type(e).__name__ == "torch.cuda.OutOfMemoryError":  # TODO check
-            context = kwargs.get("context", None) or args[-1]
+        from torch.cuda import OutOfMemoryError
+
+        if isinstance(e, OutOfMemoryError):
+            context: ServicerContext = kwargs.get("context", None) or args[-1]
             logger.exception("%s caused GPU OOM error", func.__name__)
             service_metrics.count_request_failure(FailureReasonLabel.OOM)
+
             await context.abort(StatusCode.RESOURCE_EXHAUSTED, str(e))
         elif "generate" in func.__name__.lower():
             service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
@@ -96,7 +99,7 @@ async def _handle_exception(
     raise e
 
 
-def log_rpc_handler_errors(func: Callable[[_A], _R]) -> Callable[[_A], _R]:
+def log_rpc_handler_errors(func: _F) -> _F:
     if inspect.isasyncgenfunction(func):
 
         async def func_with_log(*args, **kwargs):  # noqa: ANN002,ANN003,ANN202
@@ -106,13 +109,13 @@ def log_rpc_handler_errors(func: Callable[[_A], _R]) -> Callable[[_A], _R]:
             except Exception as e:  # noqa: BLE001
                 await _handle_exception(e, func, *args, **kwargs)
 
-        return func_with_log
+    else:
 
-    async def func_with_log(*args, **kwargs):  # noqa: ANN002,ANN003,ANN202
-        try:
-            return await func(*args, **kwargs)
-        except Exception as e:  # noqa: BLE001
-            await _handle_exception(e, func, *args, **kwargs)
+        async def func_with_log(*args, **kwargs):  # noqa: ANN002,ANN003,ANN202
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:  # noqa: BLE001
+                await _handle_exception(e, func, *args, **kwargs)
 
     return func_with_log
 
@@ -123,7 +126,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         # These set in _post_init()
         self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast | None = None
-        self.config: ModelConfig = None
+        self.config: ModelConfig | None = None
 
         self.max_max_new_tokens = args.max_new_tokens
         self.skip_special_tokens = not args.output_special_tokens
@@ -131,14 +134,21 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     @property
     def tokenizer_group(self) -> BaseTokenizerGroup:
+        assert hasattr(self.engine.engine, "tokenizer")
+        assert self.engine.engine.tokenizer is not None
+
         return self.engine.engine.tokenizer
 
     async def _post_init(self) -> None:
         self.config = await self.engine.get_model_config()
 
         self.tokenizer = await self.engine.get_tokenizer()
+        assert self.tokenizer is not None
 
         # Swap in the special TGIS stats logger
+        assert hasattr(self.engine.engine, "stat_logger")
+        assert self.engine.engine.stat_logger
+
         vllm_stat_logger = self.engine.engine.stat_logger
         tgis_stats_logger = TGISStatLogger(
             vllm_stat_logger=vllm_stat_logger,
@@ -206,7 +216,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         for i in range(len(responses)):
             res = responses[i]
             response = self._convert_output(
-                res.outputs[0], resp_options, max_is_token_limit[i], time_limit_reached
+                res.outputs[0],
+                resp_options,
+                max_is_token_limit=max_is_token_limit[i],
+                time_limit_reached=time_limit_reached,
             )
             response = self._convert_input_details(
                 res, resp_options, sampling_params, response
@@ -320,10 +333,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             self._convert_tokens(
                 result.prompt_token_ids,
                 result.prompt_logprobs,
-                resp_options.token_logprobs,
-                resp_options.token_ranks,
-                resp_options.top_n_tokens,
-                response.input_tokens,
+                include_logprobs=resp_options.token_logprobs,
+                include_ranks=resp_options.token_ranks,
+                top_n_tokens=resp_options.top_n_tokens,
+                token_infos=response.input_tokens,
             )
 
         if resp_options.input_text:
@@ -346,7 +359,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         token_start_offset: int = 0,
     ) -> GenerationResponse:
         stop_reason, stop_sequence = self._convert_reason(
-            output, max_is_token_limit, time_limit_reached
+            output,
+            max_is_token_limit=max_is_token_limit,
+            time_limit_reached=time_limit_reached,
         )
         response = GenerationResponse(
             text=output.text[text_start_offset:],
@@ -359,11 +374,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             self._convert_tokens(
                 output.token_ids,
                 output.logprobs,
-                resp_options.token_logprobs,
-                resp_options.token_ranks,
-                resp_options.top_n_tokens,
-                response.tokens,
-                token_start_offset,
+                include_logprobs=resp_options.token_logprobs,
+                include_ranks=resp_options.token_ranks,
+                top_n_tokens=resp_options.top_n_tokens,
+                token_infos=response.tokens,
+                token_start_offset=token_start_offset,
             )
         return response
 
@@ -393,9 +408,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             max_new_tokens = stopping.max_new_tokens
         min_new_tokens = max(0, stopping.min_new_tokens)
 
-        logprobs = 1 if (resp_options.token_logprobs or resp_options.token_ranks) else 0
+        logprobs: int | None = (
+            1 if (resp_options.token_logprobs or resp_options.token_ranks) else 0
+        )
         top_n_tokens = resp_options.top_n_tokens
         if top_n_tokens:
+            assert logprobs is not None
+
             # vLLM will currently return logprobs for n+1 tokens
             # (selected token plus top_n excluding selected)
             logprobs += top_n_tokens
@@ -429,6 +448,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 decoding.length_penalty.start_index,
                 decoding.length_penalty.decay_factor,
             )
+            assert self.tokenizer is not None
+
             logits_processors.append(
                 ExpDecayLengthPenaltyWarper(
                     length_penalty=length_penalty_tuple,
@@ -475,7 +496,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         *,
         max_is_token_limit: bool,
         time_limit_reached: bool,
-    ) -> tuple[StopReason, str]:
+    ) -> tuple[StopReason, str | None]:
         finish_reason = output.finish_reason
         stop_sequence = None
         if finish_reason is None:
@@ -514,7 +535,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     def _convert_tokens(  # noqa: PLR0913
         self,
         token_ids: list[int],
-        logprobs_list: list[dict[int, Logprob]] | None,
+        logprobs_list: list[dict[int, Logprob] | None] | None,
         *,
         include_logprobs: bool,
         include_ranks: bool,
@@ -522,6 +543,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         token_infos: MutableSequence[TokenInfo],  # OUT
         token_start_offset: int = 0,
     ) -> None:
+        assert self.tokenizer
+
         if token_start_offset:
             token_ids = token_ids[token_start_offset:]
             if logprobs_list is not None:
@@ -530,50 +553,60 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         token_texts = self.tokenizer.convert_ids_to_tokens(token_ids)
         for i, text in enumerate(token_texts):
             token_info = TokenInfo(text=text)
-            if logprobs_list is not None:
-                logprobs = logprobs_list[i]
-                # Logprobs entry will be None for first prompt token
-                if logprobs is not None:
-                    if include_logprobs or include_ranks:
-                        logprob = logprobs[token_ids[i]]
-                        if include_logprobs:
-                            token_info.logprob = logprob.logprob
-                        if include_ranks:
-                            token_info.rank = logprob.rank
-                    if top_n_tokens:
-                        items = sorted(
-                            logprobs.items(),
-                            key=lambda item: item[1].logprob,
-                            reverse=True,
-                        )[:top_n_tokens]
-                        # TODO later use get_lora_tokenizer here
-                        tt_texts = self.tokenizer.convert_ids_to_tokens(
-                            [tid for tid, _ in items]
-                        )
-                        token_info.top_tokens.extend(
-                            TokenInfo.TopToken(
-                                text=tt_text,
-                                logprob=(logprob.logprob if include_logprobs else None),
-                            )
-                            for tt_text, (_, logprob) in zip(tt_texts, items)
-                        )
+            if logprobs_list is None:
+                continue
+            logprobs = logprobs_list[i]
+            # Logprobs entry will be None for first prompt token
+            if logprobs is None:
+                continue
+
+            if include_logprobs or include_ranks:
+                logprob = logprobs[token_ids[i]]
+                if include_logprobs:
+                    token_info.logprob = logprob.logprob
+                if include_ranks:
+                    assert logprob.rank is not None
+
+                    token_info.rank = logprob.rank
+            if top_n_tokens:
+                items = sorted(
+                    logprobs.items(),
+                    key=lambda item: item[1].logprob,
+                    reverse=True,
+                )[:top_n_tokens]
+                # TODO later use get_lora_tokenizer here
+                tt_texts = self.tokenizer.convert_ids_to_tokens(
+                    [tid for tid, _ in items]
+                )
+
+                token_info.top_tokens.extend(
+                    TokenInfo.TopToken(
+                        text=tt_text,
+                        logprob=(logprob.logprob if include_logprobs else None),
+                    )
+                    for tt_text, (_, logprob) in zip(tt_texts, items)
+                )
             token_infos.append(token_info)
 
     async def _validate_prompt_and_tokenize(
         self,
         sampling_params: SamplingParams,
         truncate_input_tokens: int | None,
-        prompt: str | None,
+        prompt: str,
         context: ServicerContext,
     ) -> tuple[list[int], bool]:
+        assert self.config is not None
+
         max_model_len = self.config.max_model_len
         # tokenize_kwargs = {"truncation": True,
         #                    "max_length": truncate_input_tokens} \
         #     if truncate_input_tokens is not None else {
         #       "truncation": True, "max_length": max_model_len + 1}
-        tokenize_kwargs = {}
 
-        input_ids = await self.tokenizer_group.encode_async(prompt, **tokenize_kwargs)
+        input_ids = await self.tokenizer_group.encode_async(
+            prompt,
+            # **tokenize_kwargs,
+        )
 
         # TODO this is temporary until truncation option is added
         # to the TokenizerGroup encode methods
@@ -582,6 +615,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             if not sampling_params.skip_special_tokens:
                 add_bos_token = getattr(self.tokenizer, "add_bos_token", False)
                 if add_bos_token:
+                    assert self.tokenizer is not None
+
                     input_ids[0] = self.tokenizer.bos_token_id
         # -----------------------------------------------
 
@@ -667,13 +702,15 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         # into the other threads
         for req in request.requests:
             token_ids = await self.tokenizer_group.encode_async(req.text)
+
+            tokens = None
+            if request.return_tokens:
+                assert self.tokenizer is not None
+
+                self.tokenizer.convert_ids_to_tokens(token_ids)
+
             responses.append(
-                TokenizeResponse(
-                    token_count=len(token_ids),
-                    tokens=None
-                    if not request.return_tokens
-                    else self.tokenizer.convert_ids_to_tokens(token_ids),
-                )
+                TokenizeResponse(token_count=len(token_ids), tokens=tokens)
             )
 
         response = BatchedTokenizeResponse(responses=responses)
@@ -699,6 +736,9 @@ async def start_grpc_server(
 ) -> aio.Server:
     # Log memory summary after model is loaded
     from torch.cuda import memory_summary
+
+    assert isinstance(engine, AsyncLLMEngine)
+    assert isinstance(engine.engine, _AsyncLLMEngine)
 
     logger.info(memory_summary(engine.engine.device_config.device))
 

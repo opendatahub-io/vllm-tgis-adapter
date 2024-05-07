@@ -57,7 +57,7 @@ if __name__ == "__main__":
         served_model_names = [args.model]
     engine_args = AsyncEngineArgs.from_cli_args(args)
     engine = AsyncLLMEngine.from_engine_args(
-        engine_args,
+        engine_args,  # type: ignore[arg-type]
         usage_context=UsageContext.OPENAI_API_SERVER,
     )
 
