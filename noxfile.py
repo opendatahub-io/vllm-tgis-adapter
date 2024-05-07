@@ -26,9 +26,14 @@ def lint(session: nox.Session) -> None:
     session.install("pre-commit")
     session.install("-e", ".[dev]")
 
+    if run_mypy := "--mypy" in session.posargs:
+        session.posargs.remove("--mypy")
+
     args = *(session.posargs or ("--show-diff-on-failure",)), "--all-files"
     session.run("pre-commit", "run", *args)
-    session.run("python", "-m", "mypy")
+
+    if run_mypy:
+        session.run("python", "-m", "mypy")
 
 
 @nox.session(python=versions)

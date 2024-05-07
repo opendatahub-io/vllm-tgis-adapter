@@ -38,4 +38,5 @@ pip install nox
 nox --list  # list available sessions
 nox -s tests-3.10 # run tests session for a specific python version
 nox -s build-3.11 # build the wheel package
+nox -s lint-3.11 -- --mypy # run linting with type checks
 ```
