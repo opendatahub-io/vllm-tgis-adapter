@@ -70,15 +70,19 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
 
-      - name: Build and push
+      - name: Build image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          push: true
+          load: true
           cache-from: type=gha
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: "Push to quay" # NOTE: we need this step since build and push hangs on push
+        run: |
+          docker push --all-tags "${QUAY_IMAGE}"
 
       # - name: Upload artifact
       #   uses: actions/upload-artifact@v4
