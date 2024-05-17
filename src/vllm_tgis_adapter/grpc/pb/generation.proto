@@ -99,6 +99,31 @@ message DecodingParameters {
   // Exponentially increases the score of the EOS token
   // once start_index tokens have been generated
   optional LengthPenalty length_penalty = 2;
+
+  enum ResponseFormat {
+    // Plain text, no constraints
+    TEXT = 0;
+    // Valid json
+    JSON = 1;
+  }
+
+  message StringChoices {
+    repeated string choices = 1;
+  }
+
+  // Mutually-exclusive guided decoding options
+  oneof guided {
+    // Output will be in the specified format
+    ResponseFormat format = 3;
+    // Output will follow the provided JSON schema
+    string json_schema = 4;
+    // Output will follow the provided regex pattern
+    string regex = 5;
+    // Output will be exactly one of the specified choices
+    StringChoices choice = 6;
+    // Output will follow the provided context free grammar
+    string grammar = 7;
+  }
 }
 
 
