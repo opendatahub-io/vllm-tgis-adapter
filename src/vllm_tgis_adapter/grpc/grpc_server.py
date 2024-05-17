@@ -19,6 +19,9 @@ from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TextTokensPrompt
+from vllm.tgis_utils.guided_decoding import (
+    get_outlines_guided_decoding_logits_processor,
+)
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
@@ -171,7 +174,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     async def post_init(self) -> None:
         self.config = await self.engine.get_model_config()
-
+        # self.tokenizer_group = await self.engine.get_tokenizer_group()
+        self.tokenizer_group = self.engine.engine.tokenizer
         self.tokenizer = await self.engine.get_tokenizer()
         assert self.tokenizer is not None
 
@@ -499,6 +503,14 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                     eos_token_id=self.tokenizer.eos_token_id,
                 )
             )
+
+        guided_decode_logit_processor = (
+            await get_outlines_guided_decoding_logits_processor(
+                decoding, self.tokenizer
+            )
+        )
+        if guided_decode_logit_processor is not None:
+            logits_processors.append(guided_decode_logit_processor)
 
         time_limit_millis = stopping.time_limit_millis
         deadline = (
