@@ -89,11 +89,22 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         https://github.com/Dao-AILab/flash-attention/releases/download/v${FLASH_ATTN_VERSION}/flash_attn-${FLASH_ATTN_VERSION}+cu${CUDA_VERSION_FLASHATTN}torch${TORCH_VERSION}cxx11abiFALSE-cp311-cp311-linux_x86_64.whl \
         dist/*whl
 
+# vllm requires a specific nccl version built from source distribution
+# See https://github.com/NVIDIA/nccl/issues/1234
+RUN pip install \
+        -v \
+        --force-reinstall \
+        --no-binary="all" \
+        --no-cache-dir \
+        "vllm-nccl-cu12==2.18.1.0.4.0" && \
+    mv /root/.config/vllm/nccl/cu12/libnccl.so.2.18.1 /opt/vllm/lib/ && \
+    chmod 0755 /opt/vllm/lib/libnccl.so.2.18.1
+
 ENV HF_HUB_OFFLINE=1 \
     PORT=8000 \
     GRPC_PORT=8033 \
     HOME=/home/vllm \
-    VLLM_NCCL_SO_PATH=/opt/vllm/lib/python3.11/site-packages/nvidia/nccl/lib/libnccl.so.2 \
+    VLLM_NCCL_SO_PATH=/opt/vllm/lib/libnccl.so.2.18.1 \
     VLLM_USAGE_SOURCE=production-docker-image
 
 # setup non-root user for OpenShift
