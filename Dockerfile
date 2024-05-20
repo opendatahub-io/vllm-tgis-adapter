@@ -105,7 +105,8 @@ ENV HF_HUB_OFFLINE=1 \
     GRPC_PORT=8033 \
     HOME=/home/vllm \
     VLLM_NCCL_SO_PATH=/opt/vllm/lib/libnccl.so.2.18.1 \
-    VLLM_USAGE_SOURCE=production-docker-image
+    VLLM_USAGE_SOURCE=production-docker-image \
+    VLLM_WORKER_MULTIPROC_METHOD=fork
 
 # setup non-root user for OpenShift
 RUN microdnf install -y shadow-utils \
