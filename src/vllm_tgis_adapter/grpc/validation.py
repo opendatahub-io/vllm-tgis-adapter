@@ -40,7 +40,7 @@ class TGISValidationError(str, Enum):
         "not more than {1} UTF8 bytes"
     )
     TokenDetail = (
-        "must request input and/or generated tokens to request " "extra token detail"
+        "must request input and/or generated tokens to request extra token detail"
     )
     PromptPrefix = "can't retrieve prompt prefix with id '{0}': {1}"
     SampleParametersGreedy = (

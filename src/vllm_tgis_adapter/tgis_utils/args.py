@@ -38,10 +38,10 @@ class EnvVarArgumentParser(argparse.ArgumentParser):
         val = os.environ.get(_to_env_var(action.dest))
         if val:
             if action.type == bool:
-                action.default = val.lower() == "true" or val == "1"
-
+                val = val.lower() == "true" or val == "1"
             elif action.type == int:
-                action.default = int(val)
+                val = int(val)
+            action.default = val
 
         return super()._add_action(action)
 
@@ -49,7 +49,9 @@ class EnvVarArgumentParser(argparse.ArgumentParser):
 def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     # map to model
     parser.add_argument(
-        "--model-name", type=str, help="name or path of the huggingface model to use"
+        "--model-name",
+        type=str,
+        help="name or path of the huggingface model to use",
     )
     # map to max_model_len
     parser.add_argument(
@@ -91,13 +93,20 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     )  # TODO TBD
     parser.add_argument("--grpc-port", type=int, default=8033)
 
-    # TODO check/add other args here including TLS related
+    # map to ssl_certfile
+    parser.add_argument("--tls-cert-path", type=str)
+    # map to ssl_keyfile
+    parser.add_argument("--tls-key-path", type=str)
+    # map to ssl_ca_certs
+    parser.add_argument("--tls-client-ca-cert-path", type=str)
+
+    # TODO check/add other args here
 
     # revision, dtype, trust-remote-code already covered by llmengine args
     return parser
 
 
-def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:  # noqa: C901
+def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:  # noqa: C901,PLR0912
     if args.model_name:
         args.model = args.model_name
     if args.max_sequence_length is not None:
@@ -121,10 +130,10 @@ def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:  # no
             and args.num_gpus != args.num_shard
         ):
             raise ValueError("Inconsistent num_gpus and num_shard arg values")
-        num_gpus = args.num_gpus if (args.num_gpus is not None) else args.num_shard
+        num_gpus = args.num_gpus if args.num_gpus is not None else args.num_shard
         if args.tensor_parallel_size not in [None, 1, num_gpus]:
             raise ValueError(
-                "Inconsistent tensor_parallel_size and num_gpus/num_shard " "arg values"
+                "Inconsistent tensor_parallel_size and num_gpus/num_shard arg values"
             )
         args.tensor_parallel_size = num_gpus
     if args.max_logprobs < MAX_TOP_N_TOKENS + 1:
@@ -134,5 +143,21 @@ def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:  # no
     # response
     if not args.disable_log_requests:
         args.disable_log_requests = True
+
+    if args.max_batch_size is not None:
+        # Existing MAX_BATCH_SIZE settings in TGIS configs may not necessarily
+        # be best for vLLM so we'll just log a warning for now
+        logger.warning(
+            "max_batch_size is set to %d but will be ignored for now."
+            "max_num_seqs can be used if this is still needed.",
+            args.max_batch_size,
+        )
+
+    if args.tls_cert_path:
+        args.ssl_certfile = args.tls_cert_path
+    if args.tls_key_path:
+        args.ssl_keyfile = args.tls_key_path
+    if args.tls_client_ca_cert_path:
+        args.ssl_ca_certs = args.tls_client_ca_cert_path
 
     return args

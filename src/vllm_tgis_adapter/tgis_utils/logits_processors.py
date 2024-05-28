@@ -8,18 +8,33 @@ class TypicalLogitsWarperWrapper:
     def __init__(self, mass: float):
         self.warper = TypicalLogitsWarper(mass=mass)
 
-    def __call__(self, token_ids: list[int], logits: torch.Tensor) -> torch.Tensor:  # noqa: ARG002
+    def __call__(
+        self,
+        token_ids: list[int],  # noqa: ARG002
+        logits: torch.Tensor,
+    ) -> torch.Tensor:
         # transformers warpers assume tensors of shape (batch_size, vocab_size)
         # and the typical warper doesn't use input_ids
-        return self.warper(input_ids=None, scores=logits.reshape(1, -1)).flatten()
+        return self.warper(
+            input_ids=None,
+            scores=logits.reshape(1, -1),
+        ).flatten()
 
 
 class ExpDecayLengthPenaltyWarper:
-    def __init__(self, length_penalty: tuple[int, float], eos_token_id: int):
+    def __init__(
+        self,
+        length_penalty: tuple[int, float],
+        eos_token_id: int,
+    ):
         self.start, self.penalty = length_penalty
         self.eos_token_id = eos_token_id
 
-    def __call__(self, token_ids: list[int], logits: torch.Tensor) -> torch.Tensor:
+    def __call__(
+        self,
+        token_ids: list[int],
+        logits: torch.Tensor,
+    ) -> torch.Tensor:
         tokens_past = len(token_ids) - self.start
         if tokens_past > 0:
             eos_logit = logits[self.eos_token_id]

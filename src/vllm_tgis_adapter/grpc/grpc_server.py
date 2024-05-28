@@ -64,7 +64,6 @@ if TYPE_CHECKING:
 
 _T = TypeVar("_T")
 _F = TypeVar("_F", Callable, Coroutine)
-_E = TypeVar("_E")
 
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
@@ -75,23 +74,40 @@ def with_default(value: _T, default: _T) -> _T:
 
 
 async def _handle_exception(
-    e: _E,
+    e: Exception,
     func: Callable,
     *args: tuple[Any],
     **kwargs: dict[str, Any],
 ) -> None:
-    # We don't log AbortErrors since these correspond to gRPC errors
-    # intentionally raised during handling of requests.
+    context: ServicerContext = kwargs.get("context", None) or args[-1]
+    is_generate_fn = "generate" in func.__name__.lower()
+
+    # First just try to replicate the TGIS-style log messages
+    # for generate_* rpcs
+    if is_generate_fn:
+        if isinstance(e, AbortError):
+            # For things that we've already aborted, the relevant error
+            # string is already in the grpc context.
+            error_message = context.details()
+        else:
+            error_message = str(e)
+        request = kwargs.get("request", None) or args[-2]
+        logs.log_error(
+            request=request,
+            exception_str=error_message,
+            logger=logger,
+        )
+
+    # AbortErrors likely correspond to things we've already explicitly handled,
+    # So we only add special handling for other types of errors
     if not isinstance(e, AbortError):
         from torch.cuda import OutOfMemoryError
 
         if isinstance(e, OutOfMemoryError):
-            context: ServicerContext = kwargs.get("context", None) or args[-1]
             logger.exception("%s caused GPU OOM error", func.__name__)
             service_metrics.count_request_failure(FailureReasonLabel.OOM)
-
             await context.abort(StatusCode.RESOURCE_EXHAUSTED, str(e))
-        elif "generate" in func.__name__.lower():
+        elif is_generate_fn:
             service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
         else:
             service_metrics.count_request_failure(FailureReasonLabel.UNKNOWN)
@@ -108,7 +124,6 @@ def log_rpc_handler_errors(func: _F) -> _F:
                     yield val
             except Exception as e:  # noqa: BLE001
                 await _handle_exception(e, func, *args, **kwargs)
-
     else:
 
         async def func_with_log(*args, **kwargs):  # noqa: ANN002,ANN003,ANN202
@@ -159,7 +174,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     @log_rpc_handler_errors
     async def Generate(
-        self, request: BatchedGenerationRequest, context: ServicerContext
+        self,
+        request: BatchedGenerationRequest,
+        context: ServicerContext,
     ) -> BatchedGenerationResponse:
         start_time = time.time()
         service_metrics.count_generate_request(len(request.requests))
@@ -224,17 +241,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             response = self._convert_input_details(
                 res, resp_options, sampling_params, response
             )
-            if request_count == 1:
-                kind_log = "Request"
-            else:
-                kind_log = f"Sub-request {i} from batch of {request_count}"
-
-            self._log_unary_response(
+            logs.log_response(
                 request=request,
                 response=response,
                 start_time=start_time,
-                engine_response=res,
-                kind_log=kind_log,
+                engine_metrics=res.metrics,
+                sub_request_num=i,
+                logger=logger,
             )
             responses[i] = response
 
@@ -242,7 +255,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     @log_rpc_handler_errors
     async def GenerateStream(
-        self, request: SingleGenerationRequest, context: ServicerContext
+        self,
+        request: SingleGenerationRequest,
+        context: ServicerContext,
     ) -> AsyncIterator[GenerationResponse]:
         start_time = time.time()
         service_metrics.count_generate_request()
@@ -314,11 +329,14 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             return
         first_response.text = full_output
         first_response.generated_token_count = last_token_count
-        self._log_streaming_response(
+        self.log_response(
             request=request,
             response=first_response,
             start_time=start_time,
-            engine_response=last_engine_response,
+            engine_metrics=last_engine_response.metrics
+            if last_engine_response
+            else None,
+            logger=logger,
         )
 
     def _convert_input_details(
@@ -501,15 +519,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         stop_sequence = None
         if finish_reason is None:
             stop_reason = (
-                StopReason.TIME_LIMIT
-                if (time_limit_reached)
-                else StopReason.NOT_FINISHED
+                StopReason.TIME_LIMIT if time_limit_reached else StopReason.NOT_FINISHED
             )
         elif finish_reason == "length":
             stop_reason = (
-                StopReason.TOKEN_LIMIT
-                if (max_is_token_limit)
-                else StopReason.MAX_TOKENS
+                StopReason.TOKEN_LIMIT if max_is_token_limit else StopReason.MAX_TOKENS
             )
         elif finish_reason == "stop":
             stop_reason = StopReason.STOP_SEQUENCE
@@ -554,10 +568,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         for i, text in enumerate(token_texts):
             token_info = TokenInfo(text=text)
             if logprobs_list is None:
+                token_infos.append(token_info)
                 continue
+
             logprobs = logprobs_list[i]
             # Logprobs entry will be None for first prompt token
             if logprobs is None:
+                token_infos.append(token_info)
                 continue
 
             if include_logprobs or include_ranks:
@@ -602,10 +619,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         #                    "max_length": truncate_input_tokens} \
         #     if truncate_input_tokens is not None else {
         #       "truncation": True, "max_length": max_model_len + 1}
+        tokenize_kwargs: dict[str, Any] = {}
 
         input_ids = await self.tokenizer_group.encode_async(
             prompt,
-            # **tokenize_kwargs,
+            **tokenize_kwargs,
         )
 
         # TODO this is temporary until truncation option is added
@@ -642,45 +660,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         return input_ids, max_is_token_limit
 
-    @staticmethod
-    def _log_unary_response(
-        request: BatchedGenerationRequest,
-        response: GenerationResponse,
-        engine_response: RequestOutput,
-        start_time: float,
-        kind_log: str,
-    ) -> None:
-        logs.log_response(
-            inputs=[r.text for r in request.requests],
-            response=response,
-            params=request.params,
-            prefix_id=request.prefix_id,
-            engine_response=engine_response,
-            start_time=start_time,
-            kind_log=kind_log,
-            method_str="generate",
-            logger=logger,
-        )
-
-    @staticmethod
-    def _log_streaming_response(
-        request: SingleGenerationRequest,
-        response: GenerationResponse,
-        engine_response: RequestOutput,
-        start_time: float,
-    ) -> None:
-        logs.log_response(
-            inputs=[request.request.text],
-            response=response,
-            params=request.params,
-            prefix_id=request.prefix_id,
-            engine_response=engine_response,
-            start_time=start_time,
-            kind_log="Streaming response",
-            method_str="generate_stream",
-            logger=logger,
-        )
-
     @log_rpc_handler_errors
     async def Tokenize(
         self, request: BatchedTokenizeRequest, context: ServicerContext
@@ -703,14 +682,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         for req in request.requests:
             token_ids = await self.tokenizer_group.encode_async(req.text)
 
-            tokens = None
-            if request.return_tokens:
-                assert self.tokenizer is not None
-
-                self.tokenizer.convert_ids_to_tokens(token_ids)
-
             responses.append(
-                TokenizeResponse(token_count=len(token_ids), tokens=tokens)
+                TokenizeResponse(
+                    token_count=len(token_ids),
+                    tokens=self.tokenizer.convert_ids_to_tokens(token_ids)
+                    if request.return_tokens
+                    else None,
+                )
             )
 
         response = BatchedTokenizeResponse(responses=responses)
