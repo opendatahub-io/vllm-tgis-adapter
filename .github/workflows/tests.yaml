@@ -35,6 +35,8 @@ jobs:
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
+          large-packages: false
+          docker-images: false
 
       - name: Set up Python ${{ matrix.pyv }}
         uses: actions/setup-python@v5

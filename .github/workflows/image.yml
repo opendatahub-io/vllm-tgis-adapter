@@ -32,6 +32,8 @@ jobs:
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
+          large-packages: false
+          docker-images: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
