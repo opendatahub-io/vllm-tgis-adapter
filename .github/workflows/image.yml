@@ -10,6 +10,10 @@ on:
 
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 env:
   KIND_CLUSTER_NAME: "kserve-testing"
   ISVC_NAME: "vllm-tgis-isvc"
@@ -72,7 +76,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
 
-      - name: Build image
+      - name: Push image
         uses: docker/build-push-action@v5
         with:
           context: .
