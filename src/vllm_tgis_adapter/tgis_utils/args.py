@@ -1,9 +1,8 @@
 import argparse
 import os
 
-from vllm.logger import init_logger
-
 from vllm_tgis_adapter.grpc.validation import MAX_TOP_N_TOKENS
+from vllm_tgis_adapter.logging import init_logger
 
 logger = init_logger(__name__)
 

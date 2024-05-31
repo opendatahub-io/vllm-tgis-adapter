@@ -4,13 +4,14 @@ import vllm
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
-from vllm.logger import init_logger
 from vllm.usage.usage_lib import UsageContext
 
 from .grpc import start_grpc_server
+from .logging import init_logger
 from .tgis_utils.args import add_tgis_args, postprocess_tgis_args
 
 TIMEOUT_KEEP_ALIVE = 5  # seconds
+
 
 logger = init_logger(__name__)
 

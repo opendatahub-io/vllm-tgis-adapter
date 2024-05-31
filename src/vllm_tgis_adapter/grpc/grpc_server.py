@@ -16,10 +16,9 @@ from grpc._cython.cygrpc import AbortError
 from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
-from vllm.logger import init_logger
-
 from vllm.inputs import TextTokensPrompt
 
+from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
     ExpDecayLengthPenaltyWarper,
