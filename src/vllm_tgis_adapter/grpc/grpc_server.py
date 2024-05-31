@@ -139,7 +139,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     def __init__(self, engine: AsyncLLMEngine, args: argparse.Namespace):
         self.engine: AsyncLLMEngine = engine
 
-        # These set in _post_init()
+        # These are set in post_init()
         self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast | None = None
         self.config: ModelConfig | None = None
 
@@ -154,7 +154,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         return self.engine.engine.tokenizer
 
-    async def _post_init(self) -> None:
+    async def post_init(self) -> None:
         self.config = await self.engine.get_model_config()
 
         self.tokenizer = await self.engine.get_tokenizer()
@@ -722,7 +722,7 @@ async def start_grpc_server(
 
     server = aio.server()
     service = TextGenerationService(engine, args)
-    await service._post_init()  # noqa: SLF001
+    await service.post_init()
 
     generation_pb2_grpc.add_GenerationServiceServicer_to_server(service, server)
 
