@@ -18,6 +18,8 @@ from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.logger import init_logger
 
+from vllm.inputs import TextTokensPrompt
+
 from vllm_tgis_adapter.tgis_utils import logs
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
     ExpDecayLengthPenaltyWarper,
@@ -193,14 +195,16 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             input_ids, max_is_token_limit[i] = await self._validate_prompt_and_tokenize(
                 sampling_params, truncate_input_tokens, req.text, context
             )
+
+            inputs = TextTokensPrompt(
+                prompt=req.text,
+                prompt_token_ids=input_ids,
+            )
             generators.append(
-                # prompt is supplied for observability, the text is not
-                # re-tokenized when `prompt_token_ids` is supplied
                 self.engine.generate(
-                    prompt=req.text,
+                    inputs=inputs,
                     sampling_params=sampling_params,
                     request_id=f"{request_id}-{i}",
-                    prompt_token_ids=input_ids,
                 ),
             )
 
