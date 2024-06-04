@@ -274,13 +274,16 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             sampling_params, truncate_input_tokens, request.request.text, context
         )
 
+        inputs = TextTokensPrompt(
+            prompt=request.request.text, prompt_token_ids=input_ids
+        )
+
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
             # re-tokenized when `prompt_token_ids` is supplied
-            prompt=request.request.text,
+            inputs=inputs,
             sampling_params=sampling_params,
             request_id=request_id,
-            prompt_token_ids=input_ids,
         )
 
         resp_options = request.params.response
