@@ -1,5 +1,6 @@
 """Implements the logging for all tgi_* metrics for compatibility with TGIS opsviz."""
 
+import time
 from enum import StrEnum, auto
 
 from prometheus_client import Counter, Gauge, Histogram
@@ -71,8 +72,14 @@ class ServiceMetrics:
             documentation="Request time spent in queue (in seconds)",
             buckets=_duration_buckets,
         )
+        # Total response time from server
+        self.tgi_request_duration = Histogram(
+            "tgi_request_duration",
+            documentation="End-to-end generate request duration (in seconds)",
+            buckets=_duration_buckets,
+        )
 
-    def observe_tokenization_request(self, request: BatchedTokenizeRequest) -> None:
+    def count_tokenization_request(self, request: BatchedTokenizeRequest) -> None:
         self.tgi_tokenize_request_input_count.inc(len(request.requests))
 
     def observe_tokenization_response(self, response: BatchedTokenizeResponse) -> None:
@@ -87,6 +94,10 @@ class ServiceMetrics:
 
     def count_request_failure(self, reason: FailureReasonLabel) -> None:
         self.tgi_request_failure.labels(err=reason).inc(1)
+
+    def observe_generation_success(self, start_time: float) -> None:
+        duration = time.time() - start_time
+        self.tgi_request_duration.observe(duration)
 
 
 class TGISStatLogger(StatLogger):
