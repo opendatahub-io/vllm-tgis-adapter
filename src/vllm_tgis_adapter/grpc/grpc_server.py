@@ -260,10 +260,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         for i in range(len(responses)):
             res = responses[i]
             response = self._convert_output(
-                res.outputs[0],
-                resp_options,
-                max_is_token_limit=max_is_token_limit[i],
-                time_limit_reached=time_limit_reached,
+                res.outputs[0], resp_options, max_is_token_limit[i], time_limit_reached
             )
             response = self._convert_input_details(
                 res, resp_options, sampling_params, response
@@ -276,6 +273,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 sub_request_num=i,
                 logger=logger,
             )
+            service_metrics.observe_generation_success(start_time=start_time)
             responses[i] = response
 
         return BatchedGenerationResponse(responses=responses)
@@ -359,7 +357,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             return
         first_response.text = full_output
         first_response.generated_token_count = last_token_count
-        self.log_response(
+        logs.log_response(
             request=request,
             response=first_response,
             start_time=start_time,
@@ -368,6 +366,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             else None,
             logger=logger,
         )
+        service_metrics.observe_generation_success(start_time=start_time)
 
     def _convert_input_details(
         self,
@@ -702,7 +701,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     async def Tokenize(
         self, request: BatchedTokenizeRequest, context: ServicerContext
     ) -> BatchedTokenizeResponse:
-        service_metrics.observe_tokenization_request(request)
+        service_metrics.count_tokenization_request(request)
         # TODO implement these
         if request.return_offsets:
             await context.abort(
