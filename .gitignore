@@ -180,3 +180,6 @@ pyrightconfig.json
 
 src/vllm_tgis_adapter/grpc/pb/
 src/vllm_tgis_adapter/_version.py
+
+# VSCode
+.vscode/
