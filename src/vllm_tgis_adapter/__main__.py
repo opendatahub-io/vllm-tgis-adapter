@@ -8,7 +8,7 @@ from vllm.usage.usage_lib import UsageContext
 
 from .grpc import start_grpc_server
 from .logging import init_logger
-from .tgis_utils.args import add_tgis_args, postprocess_tgis_args
+from .tgis_utils.args import EnvVarArgumentParser, add_tgis_args, postprocess_tgis_args
 
 TIMEOUT_KEEP_ALIVE = 5  # seconds
 
@@ -44,7 +44,8 @@ async def grpc_server(
 
 
 if __name__ == "__main__":
-    parser = make_arg_parser()
+    # convert to our custom env var arg parser
+    parser = EnvVarArgumentParser(parser=make_arg_parser())
     parser = add_tgis_args(parser)
     args = postprocess_tgis_args(parser.parse_args())
     assert args is not None
