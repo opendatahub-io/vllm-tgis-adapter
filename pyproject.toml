@@ -29,6 +29,8 @@ dependencies = [
   "vllm>=0.4.3",
   "prometheus_client==0.20.0",
   "grpcio==1.62.1",
+  "grpcio-health-checking==1.62.1",
+  "grpcio-reflection==1.62.1",
   "transformers",
   "accelerate==0.28.0",
   "hf-transfer==0.1.6"
@@ -41,7 +43,8 @@ Source = "https://github.com/dtrifiro/vllm_tgis_adapter"
 [project.optional-dependencies]
 tests = [
   "pytest==8.2.0",
-  "pytest-cov==5.0.0"
+  "pytest-cov==5.0.0",
+  "pytest-mock==3.14.0"
 ]
 dev = [
   "vllm_tgis_adapter[tests]",
@@ -144,7 +147,8 @@ ignore = [
   "FIX",  # todo messages
   "ERA001",  # commented out code
   # formatting
-  "COM812"
+  "COM812",
+  "RET504"  # Unnecessary assignment to `args` before `return` statement
 ]
 select = ["ALL"]
 

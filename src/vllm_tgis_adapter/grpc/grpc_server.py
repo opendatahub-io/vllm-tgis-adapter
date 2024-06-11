@@ -13,6 +13,8 @@ from typing import (
 import grpc
 from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
+from grpc_health.v1 import health, health_pb2, health_pb2_grpc
+from grpc_reflection.v1alpha import reflection
 from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
@@ -31,6 +33,7 @@ from vllm_tgis_adapter.tgis_utils.metrics import (
 )
 
 from .pb import generation_pb2_grpc
+from .pb.generation_pb2 import DESCRIPTOR as _GENERATION_DESCRIPTOR
 from .pb.generation_pb2 import (
     BatchedGenerationResponse,
     BatchedTokenizeResponse,
@@ -137,7 +140,16 @@ def log_rpc_handler_errors(func: _F) -> _F:
 
 
 class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
-    def __init__(self, engine: AsyncLLMEngine, args: argparse.Namespace):
+    SERVICE_NAME = _GENERATION_DESCRIPTOR.services_by_name[
+        "GenerationService"
+    ].full_name
+
+    def __init__(
+        self,
+        engine: AsyncLLMEngine,
+        args: argparse.Namespace,
+        health_servicer: health.HealthServicer,
+    ):
         self.engine: AsyncLLMEngine = engine
 
         # These are set in post_init()
@@ -147,6 +159,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.max_max_new_tokens = args.max_new_tokens
         self.skip_special_tokens = not args.output_special_tokens
         self.default_include_stop_seqs = args.default_include_stop_seqs
+
+        self.health_servicer = health_servicer
 
     @property
     def tokenizer_group(self) -> BaseTokenizerGroup:
@@ -172,6 +186,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         )
         # 🌶️🌶️🌶️ sneaky sneak
         self.engine.engine.stat_logger = tgis_stats_logger
+
+        self.health_servicer.set(
+            self.SERVICE_NAME,
+            health_pb2.HealthCheckResponse.SERVING,
+        )
 
     @log_rpc_handler_errors
     async def Generate(
@@ -727,19 +746,21 @@ async def start_grpc_server(
     logger.info(memory_summary(engine.engine.device_config.device))
 
     server = aio.server()
-    service = TextGenerationService(engine, args)
-    await service.post_init()
 
-    generation_pb2_grpc.add_GenerationServiceServicer_to_server(service, server)
+    health_servicer = health.HealthServicer()
+    health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 
-    # TODO add reflection
+    generation = TextGenerationService(engine, args, health_servicer)
+    await generation.post_init()
+    generation_pb2_grpc.add_GenerationServiceServicer_to_server(generation, server)
 
-    # SERVICE_NAMES = (
-    #     generation_pb2.DESCRIPTOR.services_by_name["GenerationService"]
-    #     .full_name,
-    #     reflection.SERVICE_NAME,
-    # )
-    # reflection.enable_server_reflection(SERVICE_NAMES, server)
+    service_names = (
+        health.SERVICE_NAME,
+        generation.SERVICE_NAME,
+        reflection.SERVICE_NAME,
+    )
+
+    reflection.enable_server_reflection(service_names, server)
 
     host = "0.0.0.0" if args.host is None else args.host  # noqa: S104
     listen_on = f"{host}:{args.grpc_port}"
