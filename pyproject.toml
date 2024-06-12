@@ -40,6 +40,9 @@ dependencies = [
 Issues = "https://github.com/dtrifiro/vllm_tgis_adapter/issues"
 Source = "https://github.com/dtrifiro/vllm_tgis_adapter"
 
+[project.scripts]
+grpc_healthcheck = "vllm_tgis_adapter.healthcheck:cli"
+
 [project.optional-dependencies]
 tests = [
   "pytest==8.2.0",
@@ -73,7 +76,7 @@ vllm_tgis_adapter = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra -W error::grpc.experimental.ExperimentalApiWarning"
 
 [tool.coverage.run]
 branch = true
@@ -158,6 +161,7 @@ select = ["ALL"]
   "N802",  # name should be lowercase
   "ERA001"  # Found commented-out code
 ]
+"src/vllm_tgis_adapter/healthcheck.py" = ["T201"]
 "src/vllm_tgis_adapter/_version.py" = ["ALL"]
 "tests/**" = ["S", "ARG001", "ARG002", "ANN"]
 "setup.py" = [

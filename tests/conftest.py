@@ -3,14 +3,13 @@ import sys
 import threading
 
 import pytest
-from grpc_health.v1.health_pb2 import HealthCheckRequest
-from grpc_health.v1.health_pb2_grpc import Health
 from vllm import AsyncLLMEngine
 from vllm.config import DeviceConfig
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 
 from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService, start_grpc_server
+from vllm_tgis_adapter.healthcheck import health_check
 from vllm_tgis_adapter.tgis_utils.args import (
     EnvVarArgumentParser,
     add_tgis_args,
@@ -69,17 +68,13 @@ def grpc_server_url(grpc_server_thread_port):
 def grpc_server(engine, args, grpc_server_url):
     """Spins up grpc server in a background thread."""
 
-    def health_check():
-        print("Waiting for server to be up...")  # noqa: T201
-        request = HealthCheckRequest(service=TextGenerationService.SERVICE_NAME)
-        resp = Health.Check(
-            request=request,
-            target=grpc_server_url,
-            timeout=1,
+    def _health_check():
+        assert health_check(
+            server_url=grpc_server_url,
             insecure=True,
+            timeout=1,
+            service=TextGenerationService.SERVICE_NAME,
         )
-        assert resp.status == resp.SERVING
-        print("Server is up")  # noqa: T201
 
     global server  # noqa: PLW0602
 

@@ -16,6 +16,21 @@ pip install vllm-tgis-adapter
 python -m vllm_tgis_adapter
 ```
 
+### HealthCheck CLI
+
+Installing the adapter also install a grpc healthcheck cli that can be used to monitor the status of the grpc server:
+
+```console
+$ grpc_healtheck
+health check...status: SERVING
+```
+
+See usage with
+
+```bash
+grpc_healthcheck --help
+```
+
 ## Build
 
 ```bash
