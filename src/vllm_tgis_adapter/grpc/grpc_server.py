@@ -16,11 +16,11 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
-
 from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TextTokensPrompt
+
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
 from vllm_tgis_adapter.tgis_utils.guided_decoding import (
@@ -57,7 +57,6 @@ if TYPE_CHECKING:
 
     from grpc.aio import ServicerContext
     from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
     from vllm.lora.request import LoRARequest
@@ -315,8 +314,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         resp_options = request.params.response
 
-        first = True
         first_response = None
+        last_response = None
         last_output_length = 0
         last_token_count = 0
         time_limit_reached = False
@@ -325,13 +324,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         # TODO handle cancellation
         async for result in result_generator:
             last_engine_response = result
-            if first:
+            if first_response is None:
                 service_metrics.observe_queue_time(result)
                 first_response = self._convert_input_details(
                     result, resp_options, sampling_params, GenerationResponse()
                 )
+                last_response = first_response
                 yield first_response
-                first = False
 
             output = result.outputs[0]
 
@@ -340,7 +339,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 time_limit_reached = True
 
             # Convert output text and token_ids to deltas
-            yield self._convert_output(
+            last_response = self._convert_output(
                 output,
                 resp_options,
                 max_is_tok_limit,
@@ -348,20 +347,27 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 last_output_length,
                 last_token_count,
             )
-            if time_limit_reached:
-                break
+            yield last_response
 
             last_output_length = len(output.text)
             last_token_count = len(output.token_ids)
             # Save full output for logging
             full_output = output.text
 
+            if time_limit_reached:
+                break
+
         # Edit up the first_response for logging purposes only
         if first_response is None:
             # We didn't output anything!
             return
+
+        # Log and record metrics
+        assert last_response is not None
         first_response.text = full_output
-        first_response.generated_token_count = last_token_count
+        first_response.stop_reason = last_response.stop_reason
+        first_response.stop_sequence = last_response.stop_sequence
+        first_response.generated_token_count = last_response.generated_token_count
         logs.log_response(
             request=request,
             response=first_response,
@@ -522,18 +528,23 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             time.time() + time_limit_millis / 1000.0 if time_limit_millis > 0 else None
         )
 
+        random_sampling_params: dict[str, Any]
+        if greedy:
+            random_sampling_params = {"temperature": 0.0}
+        else:
+            random_sampling_params = {
+                "temperature": with_default(sampling.temperature, 1.0),
+                "top_k": with_default(sampling.top_k, -1),
+                "top_p": with_default(sampling.top_p, 1.0),
+                "seed": sampling.seed if sampling.HasField("seed") else None,
+            }
+
         try:
             sampling_params = SamplingParams(
                 logprobs=logprobs,
                 prompt_logprobs=logprobs if resp_options.input_tokens else None,
                 max_tokens=max_new_tokens,
                 min_tokens=min_new_tokens,
-                temperature=with_default(sampling.temperature, 1.0)
-                if not greedy
-                else 0.0,
-                top_k=with_default(sampling.top_k, -1),
-                top_p=with_default(sampling.top_p, 1.0),
-                seed=sampling.seed if sampling.HasField("seed") else None,
                 repetition_penalty=with_default(decoding.repetition_penalty, 1.0),
                 logits_processors=logits_processors,
                 stop=with_default(stopping.stop_sequences, None),
@@ -541,6 +552,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 if stopping.HasField("include_stop_sequence")
                 else self.default_include_stop_seqs,
                 skip_special_tokens=self.skip_special_tokens,
+                **random_sampling_params,
             )
         except ValueError as vllm_validation_error:
             # There may be validation cases caught by vLLM that are not covered
