@@ -14,6 +14,7 @@ from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
 
 if TYPE_CHECKING:
     from vllm.sequence import RequestMetrics
+
     from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
         GenerationResponse,
         Parameters,
