@@ -45,7 +45,7 @@ grpc_healthcheck = "vllm_tgis_adapter.healthcheck:cli"
 
 [project.optional-dependencies]
 tests = [
-  "pytest==8.2.0",
+  "pytest==8.2.2",
   "pytest-cov==5.0.0",
   "pytest-mock==3.14.0"
 ]
