@@ -37,8 +37,8 @@ dependencies = [
 ]
 
 [project.urls]
-Issues = "https://github.com/dtrifiro/vllm_tgis_adapter/issues"
-Source = "https://github.com/dtrifiro/vllm_tgis_adapter"
+Issues = "https://github.com/opendatahub-io/vllm_tgis_adapter/issues"
+Source = "https://github.com/opendatahub-io/vllm_tgis_adapter"
 
 [project.scripts]
 grpc_healthcheck = "vllm_tgis_adapter.healthcheck:cli"

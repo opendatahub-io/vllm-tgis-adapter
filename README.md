@@ -3,9 +3,8 @@
 vLLM adapter for a TGIS-compatible grpc server.
 
 [![PyPi](https://img.shields.io/pypi/v/vllm-tgis-adapter?label=pip)](https://pypi.org/project/vllm-tgis-adapter)
-[![Tests](https://github.com/dtrifiro/vllm-tgis-adapter/actions/workflows/tests.yaml/badge.svg)](https://github.com/dtrifiro/vllm-tgis-adapter/actions/workflows/tests.yaml)
-[![Docker Image Build](https://github.com/dtrifiro/vllm-tgis-adapter/actions/workflows/image.yml/badge.svg)](https://github.com/dtrifiro/vllm-tgis-adapter/actions/workflows/image.yml)
-[![quay.io/dtrifiro/vllm-tgis](https://img.shields.io/badge/quay.io-dtrifiro/vllm--tgis-darkred)](https://quay.io/repository/dtrifiro/vllm-tgis?tab=tags)
+[![Tests](https://github.com/opendatahub-io/vllm-tgis-adapter/actions/workflows/tests.yaml/badge.svg)](https://github.com/opendatahub-io/vllm-tgis-adapter/actions/workflows/tests.yaml)
+[![quay.io/opendatahub/vllm](https://img.shields.io/badge/quay.io-opendatahub/vllm--tgis-darkred)](https://quay.io/repository/opendatahub/vllm?tab=tags)
 
 ## Install
 
@@ -49,10 +48,10 @@ bash examples/inference.sh
 
 ### Docker
 
-Image available at [quay.io/dtrifiro/vllm-tgis](https://quay.io/dtrifiro/vllm-tgis?tab=tags)
+Image available at [quay.io/opendatahub/vllm](https://quay.io/opendatahub/vllm?tab=tags), built from [opendatahub-io/vllm](https://github.com/opendatahub-io/vllm)'s [Dockerfile.ubi](https://github.com/opendatahub-io/vllm/tree/main/Dockerfile.ubi)
 
 ```bash
-docker pull quay.io/dtrifiro/vllm-tgis
+docker pull quay.io/opendatahub/vllm
 ```
 
 ### Inference
