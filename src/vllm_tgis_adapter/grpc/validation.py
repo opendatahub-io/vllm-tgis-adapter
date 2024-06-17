@@ -1,3 +1,4 @@
+import typing
 from enum import Enum
 
 from vllm import SamplingParams
@@ -49,8 +50,14 @@ class TGISValidationError(str, Enum):
 
     # Additions that are _not_ in TGIS
     TopN = "top_n_tokens ({0}) must be <= {1}"
+    AdapterNotFound = "can't retrieve adapter with id '{0}': {1}"
+    AdaptersDisabled = "adapter_id supplied but no adapter store was configured"
+    AdapterUnsupported = "adapter type {0} is not currently supported"
+    InvalidAdapterID = (
+        "Invalid adapter id '{0}', must contain only " "alphanumeric, _ and - and /"
+    )
 
-    def error(self, *args, **kwargs) -> Exception:  # noqa: ANN002,ANN003
+    def error(self, *args, **kwargs) -> typing.NoReturn:  # noqa: ANN002,ANN003
         """Raise a ValueError with a nicely formatted string."""
         raise ValueError(self.value.format(*args, **kwargs))
 

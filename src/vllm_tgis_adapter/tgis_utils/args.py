@@ -114,6 +114,8 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("--tls-key-path", type=str)
     # map to ssl_ca_certs
     parser.add_argument("--tls-client-ca-cert-path", type=str)
+    # add a path when peft adapters will be loaded from
+    parser.add_argument("--adapter-cache", type=str)
 
     # TODO check/add other args here
 
