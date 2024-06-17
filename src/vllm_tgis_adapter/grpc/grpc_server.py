@@ -15,14 +15,15 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
+
 from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
+from vllm.entrypoints.grpc.adapters import AdapterStore, validate_adapters
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TextTokensPrompt
 from vllm.tgis_utils.guided_decoding import (
     get_outlines_guided_decoding_logits_processor,
 )
-
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
@@ -55,8 +56,10 @@ if TYPE_CHECKING:
 
     from grpc.aio import ServicerContext
     from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
+    from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
     from vllm.transformers_utils.tokenizer_group import BaseTokenizerGroup
 
@@ -163,6 +166,12 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.skip_special_tokens = not args.output_special_tokens
         self.default_include_stop_seqs = args.default_include_stop_seqs
 
+        self.adapter_store: AdapterStore | None = None
+        if args.adapter_cache:
+            self.adapter_store = AdapterStore(
+                cache_path=args.adapter_cache, adapters={}
+            )
+
         self.health_servicer = health_servicer
 
     @property
@@ -213,6 +222,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         generators = []
         max_is_token_limit = [False] * request_count
+
+        adapter_kwargs = await self._validate_adapters(request, context)
+
         for i, req in enumerate(request.requests):
             input_ids, max_is_token_limit[i] = await self._validate_prompt_and_tokenize(
                 sampling_params, truncate_input_tokens, req.text, context
@@ -227,6 +239,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                     inputs=inputs,
                     sampling_params=sampling_params,
                     request_id=f"{request_id}-{i}",
+                    **adapter_kwargs,
                 ),
             )
 
@@ -295,6 +308,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             sampling_params, truncate_input_tokens, request.request.text, context
         )
 
+        adapter_kwargs = await self._validate_adapters(request, context)
         inputs = TextTokensPrompt(
             prompt=request.request.text, prompt_token_ids=input_ids
         )
@@ -305,6 +319,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             inputs=inputs,
             sampling_params=sampling_params,
             request_id=request_id,
+            **adapter_kwargs,
         )
 
         resp_options = request.params.response
@@ -543,6 +558,20 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             await context.abort(StatusCode.INVALID_ARGUMENT, str(vllm_validation_error))
 
         return sampling_params, deadline
+
+    async def _validate_adapters(
+        self,
+        request: SingleGenerationRequest | BatchedGenerationRequest,
+        context: ServicerContext,
+    ) -> dict[str, LoRARequest]:
+        try:
+            adapters = await validate_adapters(
+                request=request, adapter_store=self.adapter_store
+            )
+        except ValueError as e:
+            service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
+            await context.abort(StatusCode.INVALID_ARGUMENT, str(e))
+        return adapters
 
     @staticmethod
     def _convert_reason(
