@@ -51,7 +51,7 @@ tests = [
 ]
 dev = [
   "vllm_tgis_adapter[tests]",
-  "ruff==0.4.3",
+  "ruff==0.4.9",
   "mypy==1.10.0",
   "types-protobuf==5.26.0.20240422"
 ]
