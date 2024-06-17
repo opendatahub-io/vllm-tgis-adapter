@@ -27,7 +27,9 @@ enum DecodingMethod {
 
 message BatchedGenerationRequest {
   string model_id = 1;
+  // Deprecated in favor of adapter_id
   optional string prefix_id = 2;
+  optional string adapter_id = 4;
   repeated GenerationRequest requests = 3;
 
   Parameters params = 10;
@@ -35,7 +37,9 @@ message BatchedGenerationRequest {
 
 message SingleGenerationRequest {
   string model_id = 1;
+  // Deprecated in favor of adapter_id
   optional string prefix_id = 2;
+  optional string adapter_id = 4;
   GenerationRequest request = 3;
 
   Parameters params = 10;

@@ -14,7 +14,6 @@ from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
 
 if TYPE_CHECKING:
     from vllm.sequence import RequestMetrics
-
     from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
         GenerationResponse,
         Parameters,
@@ -51,6 +50,7 @@ def log_response(  # noqa: PLR0913
         response=response,
         params=request.params,
         prefix_id=request.prefix_id,
+        adapter_id=request.adapter_id,
         engine_metrics=engine_metrics,
         start_time=start_time,
         kind_log=kind_log,
@@ -69,6 +69,7 @@ def log_error(
     # of just logging the simple string representation of the error
     param_str = text_format.MessageToString(request.params, as_one_line=True)
     prefix_id = request.prefix_id
+    adapter_id = request.adapter_id
 
     if isinstance(request, BatchedGenerationRequest):
         method_str = "generate"
@@ -82,7 +83,8 @@ def log_error(
 
     span_str = (
         f"{method_str}{{input={short_input} prefix_id={prefix_id} "
-        f"input_chars=[{input_chars}] params={param_str}"
+        f"adapter_id={adapter_id} input_chars=[{input_chars}] "
+        f"params={param_str}"
     )
 
     logger.error("%s: %s", span_str, exception_str)
@@ -92,6 +94,7 @@ def _log_response(  # noqa: PLR0913
     inputs: list[str],
     params: Parameters,
     prefix_id: str,
+    adapter_id: str,
     response: GenerationResponse,
     engine_metrics: RequestMetrics | None,
     start_time: float,
@@ -127,6 +130,7 @@ def _log_response(  # noqa: PLR0913
     paramstr = text_format.MessageToString(params, as_one_line=True)
     span_str = (
         f"{method_str}{{input={short_input} prefix_id={prefix_id} "
+        f"adapter_id={adapter_id} "
         f"input_chars=[{input_chars}] params={paramstr} "
         f"tokenization_time={tokenization_time * 1e3:.2f}ms "
         f"queue_time={queue_time * 1e3:.2f}ms "
