@@ -20,8 +20,9 @@ if TYPE_CHECKING:
         BatchedGenerationRequest,
         SingleGenerationRequest,
     )
-from vllm.entrypoints.grpc.validation import TGISValidationError
 from vllm.lora.request import LoRARequest
+
+from .validation import TGISValidationError
 
 global_thread_pool = None  # used for loading adapter files from disk
 
