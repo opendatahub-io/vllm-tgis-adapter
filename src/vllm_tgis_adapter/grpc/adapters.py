@@ -10,7 +10,6 @@ import asyncio
 import concurrent.futures
 import dataclasses
 import json
-import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -136,8 +135,6 @@ def _reject_bad_adapter_id(adapter_id: str) -> None:
     if not VALID_ADAPTER_ID_PATTERN.fullmatch(adapter_id):
         TGISValidationError.InvalidAdapterID.error(adapter_id)
 
-    # Check for path traversal
-    root_path = Path("/some/file/root")
-    derived_path = root_path / adapter_id
-    if not os.path.normpath(derived_path).startswith(str(root_path) + "/"):
+    cwd = Path().resolve()
+    if not Path(adapter_id).resolve().is_relative_to(cwd):
         TGISValidationError.InvalidAdapterID.error(adapter_id)
