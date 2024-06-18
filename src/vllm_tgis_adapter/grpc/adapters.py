@@ -108,13 +108,13 @@ def _get_adapter_type_from_file(adapter_id: str, adapter_path: str) -> str:
     of the adapter. It's run in a separate thread pool executor so that file
     access does not block the main event loop.
     """
-    if not Path.exists()(adapter_path):
+    if not Path(adapter_path).exists():
         TGISValidationError.AdapterNotFound.error(
             adapter_id, "directory does not exist"
         )
 
     adapter_config_path = Path(adapter_path) / "adapter_config.json"
-    if not Path.exists()(adapter_config_path):
+    if not Path(adapter_config_path).exists():
         TGISValidationError.AdapterNotFound.error(
             adapter_id, "invalid adapter: no adapter_config.json found"
         )
