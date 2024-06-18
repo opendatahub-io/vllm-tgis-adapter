@@ -9,7 +9,7 @@ from transformers import PreTrainedTokenizer
 from vllm.model_executor.guided_decoding import outlines_decoding
 from vllm.model_executor.guided_decoding.outlines_decoding import (
     GuidedDecodingMode,
-    _get_cached_logits_processor,
+    _get_logits_processor,
 )
 
 # ruff: noqa: TCH002
@@ -43,7 +43,7 @@ async def get_outlines_guided_decoding_logits_processor(
 
     result = await loop.run_in_executor(
         outlines_decoding.global_thread_pool,
-        _get_cached_logits_processor,
+        _get_logits_processor,
         guide,
         tokenizer,
         mode,
