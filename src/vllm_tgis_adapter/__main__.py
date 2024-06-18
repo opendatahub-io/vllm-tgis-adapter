@@ -6,15 +6,11 @@ import inspect
 import re
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-from typing import TYPE_CHECKING
 
 import fastapi
 import uvicorn
 import vllm
-from fastapi import APIRouter
-
-if TYPE_CHECKING:
-    from fastapi import Request
+from fastapi import APIRouter, Request  # noqa: TCH002
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -24,15 +20,11 @@ from vllm import envs
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
-
-if TYPE_CHECKING:
-    from vllm.entrypoints.openai.protocol import (
-        ChatCompletionRequest,
-        CompletionRequest,
-        EmbeddingRequest,
-    )
 from vllm.entrypoints.openai.protocol import (
+    ChatCompletionRequest,  # noqa: TCH002
     ChatCompletionResponse,
+    CompletionRequest,  # noqa: TCH002
+    EmbeddingRequest,  # noqa: TCH002
     ErrorResponse,
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
@@ -205,7 +197,7 @@ def run_server(args, llm_engine: AsyncLLMEngine = None) -> None:  # noqa: ANN001
 
     engine = (
         llm_engine
-        if not llm_engine
+        if llm_engine is not None
         else AsyncLLMEngine.from_engine_args(
             engine_args, usage_context=UsageContext.OPENAI_API_SERVER
         )
@@ -273,8 +265,6 @@ async def grpc_server(
     assert args is not None
 
     server = await start_grpc_server(async_llm_engine, args)
-
-    yield
 
     logger.info("Gracefully stopping gRPC server")
     await server.stop(30)  # TODO configurable grace
