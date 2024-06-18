@@ -60,7 +60,6 @@ if TYPE_CHECKING:
     from vllm.config import ModelConfig
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
-    from vllm.transformers_utils.tokenizer_group import BaseTokenizerGroup
 
     from .pb.generation_pb2 import (
         BatchedGenerationRequest,
@@ -172,16 +171,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         )
         self.health_servicer = health_servicer
 
-    @property
-    def tokenizer_group(self) -> BaseTokenizerGroup:
-        assert hasattr(self.engine.engine, "tokenizer")
-        assert self.engine.engine.tokenizer is not None
-
-        return self.engine.engine.tokenizer
-
     async def post_init(self) -> None:
         self.config = await self.engine.get_model_config()
-        self.tokenizer_group = self.engine.get_tokenizer_group()
+        self.tokenizer_group = self.engine.engine.get_tokenizer_group()
         self.tokenizer = await self.engine.get_tokenizer()
         assert self.tokenizer is not None
 
