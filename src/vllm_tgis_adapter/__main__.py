@@ -40,13 +40,14 @@ if TYPE_CHECKING:
     import argparse
     from collections.abc import AsyncGenerator
 
-    from fastapi import FastAPI, Request
     from vllm.config import ModelConfig
-    from vllm.entrypoints.openai.protocol import (
-        ChatCompletionRequest,
-        CompletionRequest,
-        EmbeddingRequest,
-    )
+
+from fastapi import FastAPI, Request  # noqa: TCH002
+from vllm.entrypoints.openai.protocol import (
+    ChatCompletionRequest,  # noqa: TCH002
+    CompletionRequest,  # noqa: TCH002
+    EmbeddingRequest,  # noqa: TCH002
+)
 
 TIMEOUT_KEEP_ALIVE = 5  # seconds
 
@@ -314,14 +315,14 @@ if __name__ == "__main__":
     if event_loop is None:
         event_loop = asyncio.new_event_loop()
 
-    event_loop.create_task(
+    event_loop.create_task(  # noqa: RUF006
         run_http_server(
             args,
             engine,
             model_config,
         )
     )
-    grpc = event_loop.create_task(
+    grpc = event_loop.create_task(  # noqa: RUF006
         grpc_server(
             engine,
             disable_log_stats=engine_args.disable_log_stats,
