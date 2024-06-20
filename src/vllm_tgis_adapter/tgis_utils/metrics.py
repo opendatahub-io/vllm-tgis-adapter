@@ -90,6 +90,8 @@ class ServiceMetrics:
         self.tgi_request_input_count.inc(num_requests)
 
     def observe_queue_time(self, engine_output: RequestOutput) -> None:
+        assert engine_output.metrics
+
         self.tgi_request_queue_duration.observe(engine_output.metrics.time_in_queue)
 
     def count_request_failure(self, reason: FailureReasonLabel) -> None:
