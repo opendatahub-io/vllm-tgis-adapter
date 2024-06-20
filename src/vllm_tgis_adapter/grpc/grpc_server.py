@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import time
 import uuid
@@ -804,3 +805,30 @@ async def start_grpc_server(
     logger.info("gRPC Server started at %s", listen_on)
 
     return server
+
+
+async def run_grpc_server(
+    engine: AsyncLLMEngine,
+    args: argparse.Namespace,
+    *,
+    disable_log_stats: bool,
+) -> None:
+    async def _force_log() -> None:
+        while True:
+            await asyncio.sleep(10)
+            await engine.do_log_stats()
+
+    if not disable_log_stats:
+        asyncio.create_task(_force_log())  # noqa: RUF006
+
+    assert args is not None
+
+    server = await start_grpc_server(engine, args)
+
+    try:
+        while True:
+            await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        print("Gracefully stopping gRPC server")  # noqa: T201
+        await server.stop(30)  # TODO configurable grace
+        await server.wait_for_termination()

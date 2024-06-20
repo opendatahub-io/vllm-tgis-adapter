@@ -35,7 +35,7 @@ from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
 from vllm.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
 from vllm.usage.usage_lib import UsageContext
 
-from .grpc import start_grpc_server
+from .grpc import run_grpc_server
 from .logging import init_logger
 from .tgis_utils.args import EnvVarArgumentParser, add_tgis_args, postprocess_tgis_args
 
@@ -228,32 +228,6 @@ async def run_http_server(
         await server.shutdown()
 
 
-async def run_grpc_server(
-    engine: AsyncLLMEngine,
-    *,
-    disable_log_stats: bool,
-) -> None:
-    async def _force_log() -> None:
-        while True:
-            await asyncio.sleep(10)
-            await engine.do_log_stats()
-
-    if not disable_log_stats:
-        asyncio.create_task(_force_log())  # noqa: RUF006
-
-    assert args is not None
-
-    server = await start_grpc_server(engine, args)
-
-    try:
-        while True:
-            await asyncio.sleep(60)
-    except asyncio.CancelledError:
-        print("Gracefully stopping gRPC server")  # noqa: T201
-        await server.stop(30)  # TODO configurable grace
-        await server.wait_for_termination()
-
-
 if __name__ == "__main__":
     # convert to our custom env var arg parser
     parser = EnvVarArgumentParser(parser=make_arg_parser())
@@ -322,7 +296,7 @@ if __name__ == "__main__":
         run_http_server(engine, args, model_config)
     )
     grpc_server_task = event_loop.create_task(
-        run_grpc_server(engine, disable_log_stats=engine_args.disable_log_stats)
+        run_grpc_server(engine, args, disable_log_stats=engine_args.disable_log_stats)
     )
 
     def signal_handler() -> None:
