@@ -13,7 +13,10 @@ from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
 from vllm.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
 
-from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService, start_grpc_server
+import vllm_tgis_adapter
+from vllm_tgis_adapter.__main__ import run_http_server
+from vllm_tgis_adapter.grpc import run_grpc_server
+from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
 from vllm_tgis_adapter.healthcheck import health_check
 from vllm_tgis_adapter.tgis_utils.args import (
     EnvVarArgumentParser,
@@ -90,7 +93,7 @@ def grpc_server_url(grpc_server_thread_port):
 
 
 @pytest.fixture()
-def grpc_server(engine, args, grpc_server_url):
+def _grpc_server(engine, args, grpc_server_url):
     """Spins up the grpc server in a background thread."""
 
     def _health_check():
@@ -101,34 +104,24 @@ def grpc_server(engine, args, grpc_server_url):
             service=TextGenerationService.SERVICE_NAME,
         )
 
-    global server  # noqa: PLW0602
-
     loop = asyncio.new_event_loop()
 
-    async def run_server():
-        global server  # noqa: PLW0603
-
-        server = await start_grpc_server(engine, args)
-        while server._server.is_running():  # noqa: SLF001
-            await asyncio.sleep(1)
+    global task  # noqa: PLW0602
 
     def target():
-        loop.run_until_complete(run_server())
+        global task  # noqa: PLW0603
+
+        task = loop.create_task(run_grpc_server(engine, args, disable_log_stats=False))
+        loop.run_until_complete(task)
 
     t = threading.Thread(target=target)
     t.start()
 
-    async def stop():
-        global server  # noqa: PLW0602
-
-        await server.stop(grace=None)
-        await server.wait_for_termination()
-
     try:
         wait_until(_health_check)
-        yield server
+        yield
     finally:
-        loop.create_task(stop())  # noqa: RUF006
+        task.cancel()
         t.join()
 
 
