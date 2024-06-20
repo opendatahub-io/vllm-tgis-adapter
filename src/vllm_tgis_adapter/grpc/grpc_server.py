@@ -262,7 +262,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         for i in range(len(responses)):
             res = responses[i]
             response = self._convert_output(
-                res.outputs[0], resp_options, max_is_token_limit[i], time_limit_reached
+                res.outputs[0],
+                resp_options,
+                max_is_token_limit=max_is_token_limit[i],
+                time_limit_reached=time_limit_reached,
             )
             response = self._convert_input_details(
                 res, resp_options, sampling_params, response
