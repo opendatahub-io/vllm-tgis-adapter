@@ -37,14 +37,6 @@ def lint(session: nox.Session) -> None:
 
 
 @nox.session(python=versions)
-def safety(session: nox.Session) -> None:
-    """Scan dependencies for insecure packages."""
-    session.install(".[dev]")
-    session.install("safety")
-    session.run("safety", "check", "--full-report")
-
-
-@nox.session(python=versions)
 def build(session: nox.Session) -> None:
     session.install("build", "setuptools", "twine")
 

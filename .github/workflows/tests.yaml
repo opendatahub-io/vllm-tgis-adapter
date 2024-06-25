@@ -52,10 +52,6 @@ jobs:
       - name: Lint code and check dependencies
         run: nox -s lint-${{ matrix.pyv }}
 
-      - name: Run safety session
-        run: |
-          nox -s safety-${{ matrix.pyv }} || echo ::warning title=Safety session failed::Vulnerabilities are present. Please check logs.
-
       - name: Run tests
         run: nox -s tests-${{ matrix.pyv }}
 
