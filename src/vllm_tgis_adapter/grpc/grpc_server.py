@@ -757,7 +757,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         """
         # Log the incoming tokenization request for metrics
-        service_metrics.observe_tokenization_request(request)
+        service_metrics.count_tokenization_request(request)
 
         responses: list[TokenizeResponse] = []
 
