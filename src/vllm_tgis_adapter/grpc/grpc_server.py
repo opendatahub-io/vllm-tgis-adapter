@@ -51,6 +51,18 @@ from .pb.generation_pb2 import (
 )
 from .validation import validate_input, validate_params
 
+try:
+    from vllm.tracing import (
+        contains_trace_headers,
+        extract_trace_headers,
+        log_tracing_disabled_warning,
+    )
+except ImportError:
+    _vllm_tracing_available = False
+else:
+    _vllm_tracing_available = True
+
+
 if TYPE_CHECKING:
     import argparse
     from collections.abc import AsyncIterator, MutableSequence
@@ -224,12 +236,21 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 prompt=req.text,
                 prompt_token_ids=input_ids,
             )
+            kwargs = {}
+            if _vllm_tracing_available:
+                is_tracing_enabled = await self.engine.is_tracing_enabled()
+                headers = dict(context.invocation_metadata())
+                if is_tracing_enabled:
+                    kwargs["trace_headers"] = extract_trace_headers(headers)
+                elif contains_trace_headers(headers):
+                    log_tracing_disabled_warning()
             generators.append(
                 self.engine.generate(
                     inputs=inputs,
                     sampling_params=sampling_params,
                     request_id=f"{request_id}-{i}",
                     **adapter_kwargs,
+                    **kwargs,
                 ),
             )
 
