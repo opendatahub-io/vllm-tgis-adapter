@@ -39,6 +39,14 @@ jobs:
           large-packages: false
           docker-images: false
 
+      - name: Cache specific path
+        uses: actions/cache@v3
+        with:
+          path: .nox/tests-${{matrix.pyv}}
+          key: ${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+
       - name: Set up Python ${{ matrix.pyv }}
         uses: actions/setup-python@v5
         with:
