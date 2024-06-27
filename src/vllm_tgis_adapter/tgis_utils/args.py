@@ -116,6 +116,10 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("--tls-client-ca-cert-path", type=str)
     # add a path when peft adapters will be loaded from
     parser.add_argument("--adapter-cache", type=str)
+    # backwards-compatibility support for tgis prompt tuning
+    parser.add_argument(
+        "--prefix-store-path", type=str, help="Deprecated, use --adapter-cache"
+    )
 
     # TODO check/add other args here
 

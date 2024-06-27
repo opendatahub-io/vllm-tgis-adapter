@@ -202,8 +202,18 @@ async def run_http_server(
         args.lora_modules,
         args.chat_template,
     )
+
+    kwargs = {}
+    # prompt adapter arg required for vllm >0.5.1
+    if hasattr(args, "prompt_adapters"):
+        kwargs = {"prompt_adapters": args.prompt_adapters}
+
     openai_serving_completion = OpenAIServingCompletion(
-        engine, model_config, served_model_names, args.lora_modules
+        engine,
+        model_config,
+        served_model_names,
+        args.lora_modules,
+        **kwargs,
     )
     openai_serving_embedding = OpenAIServingEmbedding(
         engine, model_config, served_model_names

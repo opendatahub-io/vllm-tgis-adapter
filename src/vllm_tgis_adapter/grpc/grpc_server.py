@@ -41,7 +41,6 @@ from vllm_tgis_adapter.tgis_utils.metrics import (
     TGISStatLogger,
 )
 
-from .adapters import AdapterStore, validate_adapters
 from .pb import generation_pb2_grpc
 from .pb.generation_pb2 import DESCRIPTOR as _GENERATION_DESCRIPTOR
 from .pb.generation_pb2 import (
@@ -55,6 +54,14 @@ from .pb.generation_pb2 import (
     TokenizeResponse,
 )
 from .validation import validate_input, validate_params
+
+try:
+    from .adapters import AdapterStore, validate_adapters
+except ImportError:
+    adapters_available = False
+else:
+    adapters_available = True
+
 
 if TYPE_CHECKING:
     import argparse
@@ -75,6 +82,11 @@ if TYPE_CHECKING:
         ResponseOptions,
         SingleGenerationRequest,
     )
+
+    try:
+        from .adapters import PromptAdapterRequest
+    except ImportError:
+        pass
 
 _T = TypeVar("_T")
 _F = TypeVar("_F", Callable, Coroutine)
@@ -170,9 +182,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.skip_special_tokens = not args.output_special_tokens
         self.default_include_stop_seqs = args.default_include_stop_seqs
 
+        # Backwards compatibility for TGIS: PREFIX_STORE_PATH
+        adapter_cache_path = args.adapter_cache or args.prefix_store_path
         self.adapter_store = (
-            AdapterStore(cache_path=args.adapter_cache, adapters={})
-            if args.adapter_cache
+            AdapterStore(cache_path=adapter_cache_path, adapters={})
+            if adapter_cache_path
             else None
         )
         self.health_servicer = health_servicer
@@ -213,7 +227,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         generators = []
         max_is_token_limit = [False] * request_count
 
-        adapter_kwargs = await self._validate_adapters(request, context)
+        adapter_kwargs = (
+            await self._validate_adapters(request, context)
+            if adapters_available
+            else {}
+        )
 
         for i, req in enumerate(request.requests):
             input_ids, max_is_token_limit[i] = await self._validate_prompt_and_tokenize(
@@ -309,7 +327,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             sampling_params, truncate_input_tokens, request.request.text, context
         )
 
-        adapter_kwargs = await self._validate_adapters(request, context)
+        adapter_kwargs = (
+            await self._validate_adapters(request, context)
+            if adapters_available
+            else {}
+        )
         inputs = TextTokensPrompt(
             prompt=request.request.text, prompt_token_ids=input_ids
         )
@@ -577,7 +599,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self,
         request: SingleGenerationRequest | BatchedGenerationRequest,
         context: ServicerContext,
-    ) -> dict[str, LoRARequest]:
+    ) -> dict[str, LoRARequest | PromptAdapterRequest]:
         try:
             adapters = await validate_adapters(
                 request=request, adapter_store=self.adapter_store
