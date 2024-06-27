@@ -20,6 +20,7 @@ from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TextTokensPrompt
+from vllm.prompt_adapter.request import PromptAdapterRequest  # noqa: TCH002
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
@@ -177,11 +178,14 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.skip_special_tokens = not args.output_special_tokens
         self.default_include_stop_seqs = args.default_include_stop_seqs
 
-        self.adapter_store = (
-            AdapterStore(cache_path=args.adapter_cache, adapters={})
-            if args.adapter_cache
-            else None
-        )
+        # Backwards compatibility for TGIS: PREFIX_STORE_PATH
+        adapter_cache_path = args.adapter_cache or args.prefix_store_path
+        if adapter_cache_path:
+            self.adapter_store = (
+                AdapterStore(cache_path=adapter_cache_path, adapters={})
+                if adapter_cache_path
+                else None
+            )
         self.health_servicer = health_servicer
 
     async def post_init(self) -> None:
@@ -590,7 +594,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self,
         request: SingleGenerationRequest | BatchedGenerationRequest,
         context: ServicerContext,
-    ) -> dict[str, LoRARequest]:
+    ) -> dict[str, LoRARequest | PromptAdapterRequest]:
         try:
             adapters = await validate_adapters(
                 request=request, adapter_store=self.adapter_store
