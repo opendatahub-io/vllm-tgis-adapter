@@ -14,14 +14,16 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from vllm.lora.request import LoRARequest
+from vllm.prompt_adapter.request import PromptAdapterRequest
+
+from .validation import TGISValidationError
+
 if TYPE_CHECKING:
     from vllm.entrypoints.grpc.pb.generation_pb2 import (
         BatchedGenerationRequest,
         SingleGenerationRequest,
     )
-from vllm.lora.request import LoRARequest
-
-from .validation import TGISValidationError
 
 global_thread_pool = None  # used for loading adapter files from disk
 
@@ -33,6 +35,7 @@ class AdapterMetadata:
     unique_id: int  # Unique integer for vllm to identify the adapter
     adapter_type: str  # The string name of the peft adapter type, e.g. LORA
     full_path: str
+    full_config: dict  # The loaded adapter_config.json dict
 
 
 @dataclasses.dataclass
@@ -45,7 +48,7 @@ class AdapterStore:
 async def validate_adapters(
     request: SingleGenerationRequest | BatchedGenerationRequest,
     adapter_store: AdapterStore | None,
-) -> dict[str, LoRARequest]:
+) -> dict[str, LoRARequest | PromptAdapterRequest]:
     """Validate the adapters.
 
     Takes the adapter name from the request and constructs a valid
@@ -56,6 +59,9 @@ async def validate_adapters(
     """
     global global_thread_pool  # noqa: PLW0603
     adapter_id = request.adapter_id
+    # Backwards compatibility for `prefix_id` arg
+    if not adapter_id and request.prefix_id:
+        adapter_id = request.prefix_id
 
     if adapter_id and not adapter_store:
         TGISValidationError.AdaptersDisabled.error()
@@ -73,18 +79,20 @@ async def validate_adapters(
         if global_thread_pool is None:
             global_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
-        adapter_type = await loop.run_in_executor(
+        adapter_config = await loop.run_in_executor(
             global_thread_pool,
-            _get_adapter_type_from_file,
+            _load_adapter_config_from_file,
             adapter_id,
             local_adapter_path,
         )
+        adapter_type = adapter_config.get("peft_type", None)
 
         # Add to cache
         adapter_metadata = AdapterMetadata(
             unique_id=adapter_store.next_unique_id,
             adapter_type=adapter_type,
             full_path=local_adapter_path,
+            full_config=adapter_config,
         )
         adapter_store.adapters[adapter_id] = adapter_metadata
 
@@ -96,12 +104,22 @@ async def validate_adapters(
             lora_local_path=adapter_metadata.full_path,
         )
         return {"lora_request": lora_request}
+    if adapter_metadata.adapter_type == "PROMPT_TUNING":
+        prompt_adapter_request = PromptAdapterRequest(
+            prompt_adapter_id=adapter_metadata.unique_id,
+            prompt_adapter_name=adapter_id,
+            prompt_adapter_local_path=adapter_metadata.full_path,
+            prompt_adapter_num_virtual_tokens=adapter_metadata.full_config.get(
+                "num_virtual_tokens", 0
+            ),
+        )
+        return {"prompt_adapter_request": prompt_adapter_request}
 
     # All other types unsupported
     TGISValidationError.AdapterUnsupported.error(adapter_metadata.adapter_type)  # noqa: RET503
 
 
-def _get_adapter_type_from_file(adapter_id: str, adapter_path: str) -> str:
+def _load_adapter_config_from_file(adapter_id: str, adapter_path: str) -> dict:
     """Get adapter from file.
 
     Performs all the filesystem access required to deduce the type
@@ -123,7 +141,7 @@ def _get_adapter_type_from_file(adapter_id: str, adapter_path: str) -> str:
     with open(adapter_config_path) as adapter_config_file:
         adapter_config = json.load(adapter_config_file)
 
-    return adapter_config.get("peft_type", None)
+    return adapter_config
 
 
 def _reject_bad_adapter_id(adapter_id: str) -> None:
