@@ -194,7 +194,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         assert hasattr(self.engine.engine, "stat_logger")
         assert self.engine.engine.stat_logger
 
-        vllm_stat_logger = self.engine.engine.stat_logger
+        vllm_stat_logger = self.engine.engine.stat_loggers["prometheus"]
         tgis_stats_logger = TGISStatLogger(
             vllm_stat_logger=vllm_stat_logger,
             max_sequence_len=self.config.max_model_len,
