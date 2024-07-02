@@ -25,14 +25,24 @@ from vllm_tgis_adapter.tgis_utils.args import (
 from .utils import get_random_port, wait_until
 
 if TYPE_CHECKING:
+    import argparse
+
     from vllm.config import ModelConfig
 
 
-@pytest.fixture()
-def args(monkeypatch, grpc_server_thread_port, http_server_thread_port):
+@pytest.fixture(scope="session")
+def monkeysession():
+    with pytest.MonkeyPatch.context() as mp:
+        yield mp
+
+
+@pytest.fixture(scope="session")
+def args(
+    monkeysession, grpc_server_thread_port, http_server_thread_port
+) -> argparse.Namespace:
     """Return parsed CLI arguments for the adapter/vLLM."""
     # avoid parsing pytest arguments as vllm/vllm_tgis_adapter arguments
-    monkeypatch.setattr(
+    monkeysession.setattr(
         sys,
         "argv",
         [
@@ -49,13 +59,13 @@ def args(monkeypatch, grpc_server_thread_port, http_server_thread_port):
     return args
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def engine_args(args) -> AsyncEngineArgs:
     """Return AsyncEngineArgs from cli args."""
     return AsyncEngineArgs.from_cli_args(args)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def engine(engine_args) -> AsyncLLMEngine:
     """Return a vLLM engine from the engine args."""
     engine = AsyncLLMEngine.from_engine_args(
@@ -65,26 +75,26 @@ def engine(engine_args) -> AsyncLLMEngine:
     return engine
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def model_config(engine) -> ModelConfig:
     """Return a vLLM ModelConfig."""
     return asyncio.run(engine.get_model_config())
 
 
-@pytest.fixture()
-def grpc_server_thread_port():
+@pytest.fixture(scope="session")
+def grpc_server_thread_port() -> int:
     """Port for the grpc server."""
     return get_random_port()
 
 
-@pytest.fixture()
-def grpc_server_url(grpc_server_thread_port):
+@pytest.fixture(scope="session")
+def grpc_server_url(grpc_server_thread_port) -> str:
     """Url for the grpc server."""
     return f"localhost:{grpc_server_thread_port}"
 
 
-@pytest.fixture()
-def _grpc_server(engine, args, grpc_server_url):
+@pytest.fixture(scope="session")
+def _grpc_server(engine, args, grpc_server_url) -> None:
     """Spins up the grpc server in a background thread."""
 
     def _health_check():
@@ -115,20 +125,20 @@ def _grpc_server(engine, args, grpc_server_url):
         t.join()
 
 
-@pytest.fixture()
-def http_server_thread_port():
+@pytest.fixture(scope="session")
+def http_server_thread_port(scope="session") -> int:
     """Port for the http server."""
     return get_random_port()
 
 
-@pytest.fixture()
-def http_server_url(http_server_thread_port):
+@pytest.fixture(scope="session")
+def http_server_url(http_server_thread_port) -> str:
     """Url for the http server."""
     return f"http://localhost:{http_server_thread_port}"
 
 
-@pytest.fixture()
-def _http_server(engine, model_config, engine_args, args, http_server_url):
+@pytest.fixture(scope="session")
+def _http_server(engine, model_config, engine_args, args, http_server_url) -> None:
     """Spins up the http server in a background thread."""
 
     def _health_check() -> None:
