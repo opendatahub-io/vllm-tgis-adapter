@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture()
 def args(monkeypatch, grpc_server_thread_port, http_server_thread_port):
+    """Return parsed CLI arguments for the adapter/vLLM."""
     # avoid parsing pytest arguments as vllm/vllm_tgis_adapter arguments
     monkeypatch.setattr(
         sys,
@@ -49,9 +50,14 @@ def args(monkeypatch, grpc_server_thread_port, http_server_thread_port):
 
 
 @pytest.fixture()
-def engine(args) -> AsyncLLMEngine:
-    """Return a vLLM engine from the args."""
-    engine_args = AsyncEngineArgs.from_cli_args(args)
+def engine_args(args) -> AsyncEngineArgs:
+    """Return AsyncEngineArgs from cli args."""
+    return AsyncEngineArgs.from_cli_args(args)
+
+
+@pytest.fixture()
+def engine(engine_args) -> AsyncLLMEngine:
+    """Return a vLLM engine from the engine args."""
     engine = AsyncLLMEngine.from_engine_args(
         engine_args,  # type: ignore[arg-type]
         usage_context=UsageContext.OPENAI_API_SERVER,
@@ -122,7 +128,7 @@ def http_server_url(http_server_thread_port):
 
 
 @pytest.fixture()
-def _http_server(engine, model_config, args, http_server_url):
+def _http_server(engine, model_config, engine_args, args, http_server_url):
     """Spins up the http server in a background thread."""
 
     def _health_check() -> None:

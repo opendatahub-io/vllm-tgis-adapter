@@ -56,21 +56,6 @@ logger = init_logger(__name__)
 _running_tasks: set[asyncio.Task] = set()
 
 
-@asynccontextmanager
-async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator:  # noqa: ARG001
-    async def _force_log():  # noqa: ANN202
-        while True:
-            await asyncio.sleep(10)
-            await engine.do_log_stats()
-
-    if not engine_args.disable_log_stats:
-        task = asyncio.create_task(_force_log())
-        _running_tasks.add(task)
-        task.add_done_callback(_running_tasks.remove)
-
-    yield
-
-
 router = fastapi.APIRouter()
 
 # Add prometheus asgi middleware to route /metrics requests
@@ -131,7 +116,23 @@ async def create_embedding(request: EmbeddingRequest, raw_request: fastapi.Reque
     return JSONResponse(content=generator.model_dump())
 
 
-def build_app(args: argparse.Namespace) -> fastapi.FastAPI:
+def build_app(  # noqa: C901 # FIXME: waiting on https://github.com/vllm-project/vllm/pull/5090 to get rid of this
+    engine: AsyncLLMEngine, args: argparse.Namespace
+) -> fastapi.FastAPI:
+    @asynccontextmanager
+    async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator:  # noqa: ARG001
+        async def _force_log():  # noqa: ANN202
+            while True:
+                await asyncio.sleep(10)
+                await engine.do_log_stats()
+
+        if not args.disable_log_stats:
+            task = asyncio.create_task(_force_log())
+            _running_tasks.add(task)
+            task.add_done_callback(_running_tasks.remove)
+
+        yield
+
     app = fastapi.FastAPI(lifespan=lifespan)
     app.include_router(router)
     app.root_path = args.root_path
@@ -182,7 +183,7 @@ async def run_http_server(
     args: argparse.Namespace,
     model_config: ModelConfig,
 ) -> None:
-    app = build_app(args)
+    app = build_app(engine, args)
 
     if args.served_model_name is not None:
         served_model_names = args.served_model_name
