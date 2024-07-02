@@ -366,10 +366,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             last_response = self._convert_output(
                 output,
                 resp_options,
-                max_is_tok_limit,
-                time_limit_reached,
-                last_output_length,
-                last_token_count,
+                max_is_token_limit=max_is_tok_limit,
+                time_limit_reached=time_limit_reached,
+                text_start_offset=last_output_length,
+                token_start_offset=last_token_count,
             )
             yield last_response
 
