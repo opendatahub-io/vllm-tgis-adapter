@@ -844,7 +844,10 @@ async def start_grpc_server(
     assert isinstance(engine, AsyncLLMEngine)
     assert isinstance(engine.engine, _AsyncLLMEngine)
 
-    logger.info(memory_summary(engine.engine.device_config.device))
+    if (device_type := engine.engine.device_config.device.type) == "cuda":
+        logger.info(memory_summary(engine.engine.device_config.device))
+    else:
+        logger.warning("Cannot print device usage for device type: %s", device_type)
 
     server = aio.server()
 
