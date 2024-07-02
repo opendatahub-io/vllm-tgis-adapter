@@ -191,16 +191,22 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         assert self.tokenizer is not None
 
         # Swap in the special TGIS stats logger
-        assert hasattr(self.engine.engine, "stat_logger")
-        assert self.engine.engine.stat_logger
-
-        vllm_stat_logger = self.engine.engine.stat_logger
-        tgis_stats_logger = TGISStatLogger(
-            vllm_stat_logger=vllm_stat_logger,
-            max_sequence_len=self.config.max_model_len,
-        )
-        # 🌶️🌶️🌶️ sneaky sneak
-        self.engine.engine.stat_logger = tgis_stats_logger
+        if hasattr(self.engine.engine, "stat_logger"):
+            # vllm <=0.5.1
+            tgis_stats_logger = TGISStatLogger(
+                vllm_stat_logger=self.engine.engine.stat_logger,
+                max_sequence_len=self.config.max_model_len,
+            )
+            self.engine.engine.stat_logger = tgis_stats_logger
+        elif hasattr(self.engine.engine, "stat_loggers"):
+            # vllm>=0.5.2
+            tgis_stats_logger = TGISStatLogger(
+                vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
+                max_sequence_len=self.config.max_model_len,
+            )
+            self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
+        else:
+            raise ValueError("engine doesn't have any known loggers.")
 
         self.health_servicer.set(
             self.SERVICE_NAME,
