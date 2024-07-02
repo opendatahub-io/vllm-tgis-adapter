@@ -1,19 +1,17 @@
+from __future__ import annotations
+
 import asyncio
 import sys
 import threading
+from typing import TYPE_CHECKING
 
 import pytest
 import requests
-from vllm import AsyncLLMEngine
-from vllm.config import DeviceConfig, ModelConfig
 from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.engine.async_llm_engine import _AsyncLLMEngine
+from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
-from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
-from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
-from vllm.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
+from vllm.usage.usage_lib import UsageContext
 
-import vllm_tgis_adapter
 from vllm_tgis_adapter.__main__ import run_http_server
 from vllm_tgis_adapter.grpc import run_grpc_server
 from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
@@ -26,19 +24,8 @@ from vllm_tgis_adapter.tgis_utils.args import (
 
 from .utils import get_random_port, wait_until
 
-
-@pytest.fixture()
-def engine(mocker, monkeypatch):
-    """Return a mocked vLLM engine."""
-    engine = mocker.Mock(spec=AsyncLLMEngine)
-    engine.engine = mocker.Mock(spec=_AsyncLLMEngine)
-    mocker.patch("torch.cuda.memory_summary", return_value="mocked")
-    engine.engine.device_config = mocker.Mock(spec=DeviceConfig)
-    engine.engine.device_config.device = "cuda"
-
-    engine.engine.stat_logger = "mocked"
-
-    return engine
+if TYPE_CHECKING:
+    from vllm.config import ModelConfig
 
 
 @pytest.fixture()
@@ -62,22 +49,20 @@ def args(monkeypatch, grpc_server_thread_port, http_server_thread_port):
 
 
 @pytest.fixture()
-def model_config(mocker):
-    """Return a mocked vLLM ModelConfig."""
+def engine(args) -> AsyncLLMEngine:
+    """Return a vLLM engine from the args."""
+    engine_args = AsyncEngineArgs.from_cli_args(args)
+    engine = AsyncLLMEngine.from_engine_args(
+        engine_args,  # type: ignore[arg-type]
+        usage_context=UsageContext.OPENAI_API_SERVER,
+    )
+    return engine
 
-    def modelconfig_init(self, *args):
-        self.model = "dummy_model"
-        self.tokenizer = "mock_tokenizer"
-        self.tokenizer_mode = "mock_tokenizer"
-        self.trust_remote_code = False
-        self.dtype = "bloat"
-        self.seed = 42
-        self.skip_tokenizer_init = True
-        self.max_model_len = 42
-        self.tokenizer_revision = "dummy_revision"
 
-    mocker.patch("vllm.config.ModelConfig.__init__", modelconfig_init)
-    return ModelConfig()
+@pytest.fixture()
+def model_config(engine) -> ModelConfig:
+    """Return a vLLM ModelConfig."""
+    return asyncio.run(engine.get_model_config())
 
 
 @pytest.fixture()
@@ -105,11 +90,10 @@ def _grpc_server(engine, args, grpc_server_url):
         )
 
     loop = asyncio.new_event_loop()
-
-    global task  # noqa: PLW0602
+    task: asyncio.Task | None = None
 
     def target():
-        global task  # noqa: PLW0603
+        nonlocal task
 
         task = loop.create_task(run_grpc_server(engine, args, disable_log_stats=False))
         loop.run_until_complete(task)
@@ -138,24 +122,10 @@ def http_server_url(http_server_thread_port):
 
 
 @pytest.fixture()
-def _http_server(engine, args, http_server_url, model_config, mocker, monkeypatch):  # noqa: PLR0913
+def _http_server(engine, model_config, args, http_server_url):
     """Spins up the http server in a background thread."""
-    chat = mocker.Mock(spec=OpenAIServingChat)
-    completion = mocker.Mock(spec=OpenAIServingCompletion)
-    embedding = mocker.Mock(spec=OpenAIServingEmbedding)
-    chat.engine = engine
-    completion.engine = engine
-    embedding.engine = engine
 
-    mocker.patch("vllm_tgis_adapter.__main__.OpenAIServingChat", return_value=chat)
-    mocker.patch(
-        "vllm_tgis_adapter.__main__.OpenAIServingCompletion", return_value=completion
-    )
-    mocker.patch(
-        "vllm_tgis_adapter.__main__.OpenAIServingEmbedding", return_value=embedding
-    )
-
-    def _health_check():
+    def _health_check() -> None:
         requests.get(
             f"{http_server_url}/health",
             timeout=1,
@@ -165,17 +135,10 @@ def _http_server(engine, args, http_server_url, model_config, mocker, monkeypatc
 
     loop = asyncio.new_event_loop()
 
-    monkeypatch.setattr(
-        vllm_tgis_adapter.__main__,
-        "engine_args",
-        mocker.Mock(spec=AsyncEngineArgs),
-        raising=False,
-    )
-
-    global task  # noqa: PLW0602
+    task: asyncio.Task | None = None
 
     def target():
-        global task  # noqa: PLW0603
+        nonlocal task
 
         task = loop.create_task(run_http_server(engine, args, model_config))
         loop.run_until_complete(task)
