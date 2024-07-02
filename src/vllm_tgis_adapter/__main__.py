@@ -292,20 +292,24 @@ if __name__ == "__main__":
     if event_loop is None:
         event_loop = asyncio.new_event_loop()
 
-    http_server_task = event_loop.create_task(
-        run_http_server(engine, args, model_config)
-    )
-    grpc_server_task = event_loop.create_task(
-        run_grpc_server(engine, args, disable_log_stats=engine_args.disable_log_stats)
-    )
+    async def run() -> None:
+        loop = asyncio.get_running_loop()
 
-    def signal_handler() -> None:
-        # prevents the uvicorn signal handler to exit early
-        grpc_server_task.cancel()
-        http_server_task.cancel()
+        http_server_task = loop.create_task(run_http_server(engine, args, model_config))
+        grpc_server_task = loop.create_task(
+            run_grpc_server(
+                engine, args, disable_log_stats=engine_args.disable_log_stats
+            )
+        )
 
-    event_loop.add_signal_handler(signal.SIGINT, signal_handler)
-    event_loop.add_signal_handler(signal.SIGTERM, signal_handler)
+        def signal_handler() -> None:
+            # prevents the uvicorn signal handler to exit early
+            grpc_server_task.cancel()
+            http_server_task.cancel()
 
-    event_loop.run_until_complete(http_server_task)
-    event_loop.run_until_complete(grpc_server_task)
+        loop.add_signal_handler(signal.SIGINT, signal_handler)
+        loop.add_signal_handler(signal.SIGTERM, signal_handler)
+
+        await asyncio.gather(grpc_server_task, http_server_task)
+
+    event_loop.run_until_complete(run())
