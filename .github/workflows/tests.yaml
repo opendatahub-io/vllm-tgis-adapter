@@ -11,6 +11,11 @@ on:
 
 env:
   FORCE_COLOR: "1"
+  # facilitate testing by building vLLM for CPU when needed
+  VLLM_CPU_DISABLE_AVX512: "true"
+  VLLM_TARGET_DEVICE: "cpu"
+  # prefer torch cpu version
+  PIP_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -25,6 +30,11 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         pyv: ["3.11"]
+        vllm_version:
+          # - "pypi" # skip the pypi version as it will not work with CPU
+          - "git+https://github.com/vllm-project/vllm@v0.5.0.post1"
+          - "git+https://github.com/vllm-project/vllm@main"
+          - "git+https://github.com/opendatahub-io/vllm@main"
 
     steps:
       - name: Check out the repository
@@ -49,6 +59,14 @@ jobs:
           python -m pip install --upgrade pip nox
           pip --version
           nox --version
+
+      - name: Set custom vllm version
+        if: ${{ matrix.vllm_version != 'pypi' }}
+        run: |
+          vllm_version="vllm@${{matrix.vllm_version}}"
+          echo "Using vllm@${vllm_version}"
+
+          sed -i "s|\"vllm.*\",|\"${vllm_version}\",|g" pyproject.toml
 
       - name: Lint code and check dependencies
         run: nox -s lint-${{ matrix.pyv }}
