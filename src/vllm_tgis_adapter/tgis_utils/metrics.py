@@ -5,7 +5,13 @@ from enum import StrEnum, auto
 
 from prometheus_client import Counter, Gauge, Histogram
 from vllm import RequestOutput
-from vllm.engine.metrics import StatLogger, Stats
+from vllm.engine.metrics import Stats
+
+try:
+    from vllm.engine.metrics import StatLoggerBase
+except ImportError:
+    # vllm<=0.5.1
+    from vllm.engine.metrics import StatLogger as StatLoggerBase
 
 from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
     BatchedTokenizeRequest,
@@ -102,10 +108,10 @@ class ServiceMetrics:
         self.tgi_request_duration.observe(duration)
 
 
-class TGISStatLogger(StatLogger):
+class TGISStatLogger(StatLoggerBase):
     """Wraps the vLLM StatLogger to report TGIS metric names for compatibility."""
 
-    def __init__(self, vllm_stat_logger: StatLogger, max_sequence_len: int):
+    def __init__(self, vllm_stat_logger: StatLoggerBase, max_sequence_len: int):
         # Not calling super-init because we're wrapping and delegating to
         # vllm_stat_logger
         self._vllm_stat_logger = vllm_stat_logger
