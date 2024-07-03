@@ -239,11 +239,6 @@ if __name__ == "__main__":
     logger.info("vLLM version %s", vllm.__version__)
     logger.info("args: %s", args)
 
-    if args.served_model_name is not None:
-        served_model_names = args.served_model_name
-    else:
-        served_model_names = [args.model]
-
     engine_args = AsyncEngineArgs.from_cli_args(args)
 
     # Enforce pixel values as image input type for vision language models
