@@ -78,3 +78,17 @@ nox -s tests-3.10 # run tests session for a specific python version
 nox -s build-3.11 # build the wheel package
 nox -s lint-3.11 -- --mypy # run linting with type checks
 ```
+
+### Testing without a GPU
+
+The standard vllm built requires an Nvidia GPU. When this is not available, it is possible to compile `vllm` from source with CPU support:
+
+```bash
+
+env \
+    VLLM_CPU_DISABLE_AVX512=true VLLM_TARGET_DEVICE=cpu \
+    PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
+    pip install git+https://github.com/vllm-project/vllm
+```
+
+making it possible to run the tests on most hardware. Please note that the `pip` extra index url is required in order to install the torch CPU version.
