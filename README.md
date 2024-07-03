@@ -5,6 +5,7 @@ vLLM adapter for a TGIS-compatible grpc server.
 [![PyPi](https://img.shields.io/pypi/v/vllm-tgis-adapter?label=pip)](https://pypi.org/project/vllm-tgis-adapter)
 [![Tests](https://github.com/opendatahub-io/vllm-tgis-adapter/actions/workflows/tests.yaml/badge.svg)](https://github.com/opendatahub-io/vllm-tgis-adapter/actions/workflows/tests.yaml)
 [![quay.io/opendatahub/vllm](https://img.shields.io/badge/quay.io-opendatahub/vllm--tgis-darkred)](https://quay.io/repository/opendatahub/vllm?tab=tags)
+[![codecov](https://codecov.io/github/opendatahub-io/vllm-tgis-adapter/branch/main/graph/badge.svg?token=1HVSOP6N0J)](https://codecov.io/github/opendatahub-io/vllm-tgis-adapter)
 
 ## Install
 
