@@ -61,10 +61,10 @@ jobs:
           nox --version
 
       - name: Lint code and check dependencies
-        run: nox -s lint-${{ matrix.pyv }}
+        run: nox -v -s lint-${{ matrix.pyv }}
 
       - name: Run tests
-        run: nox -s tests-${{ matrix.pyv }} -- --cov-report=xml
+        run: nox -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
         env:
           VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
 
