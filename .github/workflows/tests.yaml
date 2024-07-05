@@ -31,7 +31,7 @@ jobs:
         os: [ubuntu-latest]
         pyv: ["3.11"]
         vllm_version:
-          # - "pypi" # skip the pypi version as it will not work with CPU
+          # - "" # skip the pypi version as it will not work on CPU
           - "git+https://github.com/vllm-project/vllm@v0.5.0.post1"
           - "git+https://github.com/vllm-project/vllm@main"
           - "git+https://github.com/opendatahub-io/vllm@main"
@@ -60,19 +60,13 @@ jobs:
           pip --version
           nox --version
 
-      - name: Set custom vllm version
-        if: ${{ matrix.vllm_version != 'pypi' }}
-        run: |
-          vllm_version="vllm@${{matrix.vllm_version}}"
-          echo "Using vllm@${vllm_version}"
-
-          sed -i "s|\"vllm.*\",|\"${vllm_version}\",|g" pyproject.toml
-
       - name: Lint code and check dependencies
         run: nox -s lint-${{ matrix.pyv }}
 
       - name: Run tests
         run: nox -s tests-${{ matrix.pyv }} -- --cov-report=xml
+        env:
+          VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
