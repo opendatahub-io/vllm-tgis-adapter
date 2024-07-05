@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import nox
@@ -11,7 +12,11 @@ versions = ["3.9", "3.10", "3.11", "3.12"]
 
 @nox.session(python=versions)
 def tests(session: nox.Session) -> None:
+    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
+        session.install(vllm_version)
+
     session.install(".[tests]")
+
     session.run(
         "pytest",
         "--cov",
