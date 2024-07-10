@@ -20,6 +20,11 @@ from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TextTokensPrompt
+from vllm.tracing import (
+    contains_trace_headers,
+    extract_trace_headers,
+    log_tracing_disabled_warning,
+)
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
@@ -50,18 +55,6 @@ from .pb.generation_pb2 import (
     TokenizeResponse,
 )
 from .validation import validate_input, validate_params
-
-try:
-    from vllm.tracing import (
-        contains_trace_headers,
-        extract_trace_headers,
-        log_tracing_disabled_warning,
-    )
-except ImportError:
-    _vllm_tracing_available = False
-else:
-    _vllm_tracing_available = True
-
 
 if TYPE_CHECKING:
     import argparse
@@ -191,22 +184,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         assert self.tokenizer is not None
 
         # Swap in the special TGIS stats logger
-        if hasattr(self.engine.engine, "stat_logger"):
-            # vllm <=0.5.1
-            tgis_stats_logger = TGISStatLogger(
-                vllm_stat_logger=self.engine.engine.stat_logger,
-                max_sequence_len=self.config.max_model_len,
-            )
-            self.engine.engine.stat_logger = tgis_stats_logger
-        elif hasattr(self.engine.engine, "stat_loggers"):
-            # vllm>=0.5.2
-            tgis_stats_logger = TGISStatLogger(
-                vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
-                max_sequence_len=self.config.max_model_len,
-            )
-            self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
-        else:
-            raise ValueError("engine doesn't have any known loggers.")
+        tgis_stats_logger = TGISStatLogger(
+            vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
+            max_sequence_len=self.config.max_model_len,
+        )
+        self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
 
         self.health_servicer.set(
             self.SERVICE_NAME,
@@ -243,13 +225,12 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 prompt_token_ids=input_ids,
             )
             kwargs = {}
-            if _vllm_tracing_available:
-                is_tracing_enabled = await self.engine.is_tracing_enabled()
-                headers = dict(context.invocation_metadata())
-                if is_tracing_enabled:
-                    kwargs["trace_headers"] = extract_trace_headers(headers)
-                elif contains_trace_headers(headers):
-                    log_tracing_disabled_warning()
+            is_tracing_enabled = await self.engine.is_tracing_enabled()
+            headers = dict(context.invocation_metadata())
+            if is_tracing_enabled:
+                kwargs["trace_headers"] = extract_trace_headers(headers)
+            elif contains_trace_headers(headers):
+                log_tracing_disabled_warning()
             generators.append(
                 self.engine.generate(
                     inputs=inputs,
