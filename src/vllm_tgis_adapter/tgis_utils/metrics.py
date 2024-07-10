@@ -5,13 +5,7 @@ from enum import StrEnum, auto
 
 from prometheus_client import Counter, Gauge, Histogram
 from vllm import RequestOutput
-from vllm.engine.metrics import Stats
-
-try:
-    from vllm.engine.metrics import StatLoggerBase
-except ImportError:
-    # vllm<=0.5.1
-    from vllm.engine.metrics import StatLogger as StatLoggerBase
+from vllm.engine.metrics import StatLoggerBase, Stats
 
 from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
     BatchedTokenizeRequest,
