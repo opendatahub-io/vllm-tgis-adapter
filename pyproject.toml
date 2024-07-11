@@ -59,7 +59,7 @@ dev = [
   "vllm_tgis_adapter[tests]",
   "ruff==0.5.1",
   "mypy==1.10.1",
-  "types-protobuf==5.26.0.20240422",
+  "types-protobuf==5.27.0.20240626",
   "types-requests==2.32.0.20240602"
 ]
 flash_attn = [
