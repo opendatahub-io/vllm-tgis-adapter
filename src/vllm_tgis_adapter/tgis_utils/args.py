@@ -83,6 +83,8 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     )
     # map to max_num_seqs ... TBD
     parser.add_argument("--max-batch-size", type=int)
+    # legacy arg no longer supported
+    parser.add_argument("--max-concurrent-requests", type=int)
     # map to dtype
     parser.add_argument("--dtype-str", type=str, help="deprecated, use dtype")
     # map to quantization
@@ -120,6 +122,13 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
         "--prefix-store-path", type=str, help="Deprecated, use --adapter-cache"
     )
+    # spec decode
+    parser.add_argument("--speculator-name", type=str)
+    # spec decode not-yet-supported args
+    parser.add_argument("--speculator-n-candidates", type=int)
+    parser.add_argument("--speculator-max-batch-size", type=int)
+    # allow re-enabling vllm native per-request logging
+    parser.add_argument("--enable-vllm-log-requests", type=bool, default=False)
 
     # TODO check/add other args here
 
@@ -162,16 +171,37 @@ def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:  # no
         args.max_logprobs = MAX_TOP_N_TOKENS + 1
     # Turn off vLLM per-request logging because the TGIS server logs each
     # response
-    if not args.disable_log_requests:
-        args.disable_log_requests = True
+    args.disable_log_requests = not args.enable_vllm_log_requests
+
+    # Spec decode related
+    if args.speculator_name:
+        if args.speculative_model and args.speculative_model != args.speculator_name:
+            raise ValueError(
+                "Inconsistent speculator_name and speculative_model arg values"
+            )
+        args.speculative_model = args.speculator_name
+        if not args.use_v2_block_manager:
+            logger.info("Enabling V2 block manager, required for speculative decoding")
+            args.use_v2_block_manager = True
+
+    if args.speculator_n_candidates or args.speculator_max_batch_size:
+        logger.warning(
+            "speculator_n_candidates and speculator_max_batch_size args are not "
+            "yet supported"
+        )
 
     if args.max_batch_size is not None:
         # Existing MAX_BATCH_SIZE settings in TGIS configs may not necessarily
         # be best for vLLM so we'll just log a warning for now
         logger.warning(
-            "max_batch_size is set to %d but will be ignored for now."
+            "max_batch_size is set to %d but will be ignored for now. "
             "max_num_seqs can be used if this is still needed.",
             args.max_batch_size,
+        )
+    if args.max_concurrent_requests is not None:
+        logger.warning(
+            "max_concurrent_requests is not supported by tgis-vllm and "
+            "will be ignored."
         )
 
     if args.tls_cert_path:
