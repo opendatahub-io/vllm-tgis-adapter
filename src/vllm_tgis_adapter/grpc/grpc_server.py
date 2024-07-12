@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
 import time
 import uuid
 from collections.abc import Callable, Coroutine
@@ -68,7 +69,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, MutableSequence
 
     from grpc.aio import ServicerContext
-    from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+    from transformers import PreTrainedTokenizer
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
     from vllm.lora.request import LoRARequest
@@ -93,6 +94,10 @@ _F = TypeVar("_F", Callable, Coroutine)
 
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
+
+ADD_SPECIAL_TOKENS = os.getenv("ADD_SPECIAL_TOKENS")
+if ADD_SPECIAL_TOKENS is not None:
+    ADD_SPECIAL_TOKENS = ADD_SPECIAL_TOKENS.lower() not in (0, "false")
 
 
 def with_default(value: _T, default: _T) -> _T:
@@ -174,8 +179,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     ):
         self.engine: AsyncLLMEngine = engine
 
-        # These are set in post_init()
-        self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast | None = None
+        # This is set in post_init()
         self.config: ModelConfig | None = None
 
         self.max_max_new_tokens = args.max_new_tokens
@@ -193,9 +197,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     async def post_init(self) -> None:
         self.config = await self.engine.get_model_config()
-        self.tokenizer_group = self.engine.engine.get_tokenizer_group()
-        self.tokenizer = await self.engine.get_tokenizer()
-        assert self.tokenizer is not None
 
         # Swap in the special TGIS stats logger
         tgis_stats_logger = TGISStatLogger(
@@ -218,8 +219,15 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
+        adapter_kwargs = (
+            await self._validate_adapters(request, context)
+            if adapters_available
+            else {}
+        )
+        tokenizer = await self._get_tokenizer(adapter_kwargs)
+
         sampling_params, deadline = await self._validate_and_convert_params(
-            request.params, context
+            request.params, tokenizer, context
         )
         truncate_input_tokens = with_default(request.params.truncate_input_tokens, None)
         request_count = len(request.requests)
@@ -227,15 +235,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         generators = []
         max_is_token_limit = [False] * request_count
 
-        adapter_kwargs = (
-            await self._validate_adapters(request, context)
-            if adapters_available
-            else {}
-        )
-
         for i, req in enumerate(request.requests):
             input_ids, max_is_token_limit[i] = await self._validate_prompt_and_tokenize(
-                sampling_params, truncate_input_tokens, req.text, context
+                sampling_params, truncate_input_tokens, req.text, tokenizer, context
             )
 
             inputs = TextTokensPrompt(
@@ -318,20 +320,26 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request()
         request_id = self.request_id(context)
-        sampling_params, deadline = await self._validate_and_convert_params(
-            request.params, context
-        )
-        truncate_input_tokens = with_default(request.params.truncate_input_tokens, None)
-
-        input_ids, max_is_tok_limit = await self._validate_prompt_and_tokenize(
-            sampling_params, truncate_input_tokens, request.request.text, context
-        )
-
         adapter_kwargs = (
             await self._validate_adapters(request, context)
             if adapters_available
             else {}
         )
+        tokenizer = await self._get_tokenizer(adapter_kwargs)
+
+        sampling_params, deadline = await self._validate_and_convert_params(
+            request.params, tokenizer, context
+        )
+        truncate_input_tokens = with_default(request.params.truncate_input_tokens, None)
+
+        input_ids, max_is_tok_limit = await self._validate_prompt_and_tokenize(
+            sampling_params,
+            truncate_input_tokens,
+            request.request.text,
+            tokenizer,
+            context,
+        )
+
         inputs = TextTokensPrompt(
             prompt=request.request.text, prompt_token_ids=input_ids
         )
@@ -478,7 +486,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         return uuid.uuid4().hex
 
     async def _validate_and_convert_params(
-        self, params: Parameters, context: ServicerContext
+        self,
+        params: Parameters,
+        tokenizer: PreTrainedTokenizer,
+        context: ServicerContext,
     ) -> tuple[SamplingParams, float | None]:
         """Return (sampling_params, deadline)."""
         # First run TGIS validation to raise errors that match the TGIS api
@@ -539,19 +550,16 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 decoding.length_penalty.start_index,
                 decoding.length_penalty.decay_factor,
             )
-            assert self.tokenizer is not None
 
             logits_processors.append(
                 ExpDecayLengthPenaltyWarper(
                     length_penalty=length_penalty_tuple,
-                    eos_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=tokenizer.eos_token_id,
                 )
             )
 
         guided_decode_logit_processor = (
-            await get_outlines_guided_decoding_logits_processor(
-                decoding, self.tokenizer
-            )
+            await get_outlines_guided_decoding_logits_processor(decoding, tokenizer)
         )
         if guided_decode_logit_processor is not None:
             logits_processors.append(guided_decode_logit_processor)
@@ -597,7 +605,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     async def _validate_adapters(
         self,
-        request: SingleGenerationRequest | BatchedGenerationRequest,
+        request: SingleGenerationRequest
+        | BatchedGenerationRequest
+        | TokenizeResponse
+        | BatchedTokenizeRequest,
         context: ServicerContext,
     ) -> dict[str, LoRARequest | PromptAdapterRequest]:
         try:
@@ -608,6 +619,12 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(e))
         return adapters
+
+    async def _get_tokenizer(
+        self, adapter_kwargs: dict[str, Any]
+    ) -> PreTrainedTokenizer:
+        lora_request = adapter_kwargs.get("lora_request")
+        return await self.engine.get_tokenizer(lora_request)
 
     @staticmethod
     def _convert_reason(
@@ -655,17 +672,15 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         include_logprobs: bool,
         include_ranks: bool,
         top_n_tokens: int,
+        tokenizer: PreTrainedTokenizer,
         token_infos: MutableSequence[TokenInfo],  # OUT
         token_start_offset: int = 0,
     ) -> None:
-        assert self.tokenizer
-
         if token_start_offset:
             token_ids = token_ids[token_start_offset:]
             if logprobs_list is not None:
                 logprobs_list = logprobs_list[token_start_offset:]
-        # TODO later use get_lora_tokenizer here
-        token_texts = self.tokenizer.convert_ids_to_tokens(token_ids)
+        token_texts = tokenizer.convert_ids_to_tokens(token_ids)
         for i, text in enumerate(token_texts):
             token_info = TokenInfo(text=text)
             if logprobs_list is None:
@@ -692,10 +707,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                     key=lambda item: item[1].logprob,
                     reverse=True,
                 )[:top_n_tokens]
-                # TODO later use get_lora_tokenizer here
-                tt_texts = self.tokenizer.convert_ids_to_tokens(
-                    [tid for tid, _ in items]
-                )
+                tt_texts = tokenizer.convert_ids_to_tokens([tid for tid, _ in items])
 
                 token_info.top_tokens.extend(
                     TokenInfo.TopToken(
@@ -706,39 +718,36 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 )
             token_infos.append(token_info)
 
-    async def _validate_prompt_and_tokenize(
+    async def _validate_prompt_and_tokenize(  # noqa: PLR0913
         self,
         sampling_params: SamplingParams,
         truncate_input_tokens: int | None,
         prompt: str,
+        tokenizer: PreTrainedTokenizer,
         context: ServicerContext,
     ) -> tuple[list[int], bool]:
         assert self.config is not None
 
         max_model_len = self.config.max_model_len
-        # tokenize_kwargs = {"truncation": True,
-        #                    "max_length": truncate_input_tokens} \
-        #     if truncate_input_tokens is not None else {
-        #       "truncation": True, "max_length": max_model_len + 1}
-        tokenize_kwargs: dict[str, Any] = {}
 
-        input_ids = await self.tokenizer_group.encode_async(
-            prompt,
-            **tokenize_kwargs,
+        # Add special tokens based on env var or else only if the tokenizer
+        # does not have a chat template => this is not a chat model
+        add_special_tokens = (
+            ADD_SPECIAL_TOKENS
+            if ADD_SPECIAL_TOKENS is not None
+            else not tokenizer.chat_template
         )
 
-        # TODO this is temporary until truncation option is added
-        # to the TokenizerGroup encode methods
-        if truncate_input_tokens and truncate_input_tokens < len(input_ids):
-            input_ids = input_ids[-truncate_input_tokens:]
-            if not sampling_params.skip_special_tokens:
-                add_bos_token = getattr(self.tokenizer, "add_bos_token", False)
-                if add_bos_token:
-                    assert self.tokenizer is not None
+        tokenizer_kwargs: dict[str, Any] = {"add_special_tokens": add_special_tokens}
+        if truncate_input_tokens is not None:
+            tokenizer_kwargs.update(
+                {
+                    "truncation": True,
+                    "max_length": truncate_input_tokens,
+                }
+            )
 
-                    input_ids[0] = self.tokenizer.bos_token_id
-        # -----------------------------------------------
-
+        input_ids = tokenizer(prompt, **tokenizer_kwargs).input_ids
         token_num = len(input_ids)
 
         try:
@@ -765,7 +774,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     async def Tokenize(
         self,
         request: BatchedTokenizeRequest,
-        context: ServicerContext,  # noqa: ARG002
+        context: ServicerContext,
     ) -> BatchedTokenizeResponse:
         """Handle tokenization requests by tokenizing input texts \
 
@@ -789,12 +798,16 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         # Log the incoming tokenization request for metrics
         service_metrics.count_tokenization_request(request)
 
+        # TODO simplify to only check for lora adapter
+        adapter_kwargs = await self._validate_adapters(request, context)
+        tokenizer = await self._get_tokenizer(adapter_kwargs)
+
         responses: list[TokenizeResponse] = []
 
         # TODO: maybe parallelize, also move convert_ids_to_tokens into the
         # other threads
         for req in request.requests:
-            batch_encoding = self.tokenizer.encode_plus(
+            batch_encoding = tokenizer.encode_plus(
                 text=req.text, return_offsets_mapping=request.return_offsets
             )
 
@@ -806,7 +819,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 token_count = request.truncate_input_tokens
 
             # Initialize Tokens from ids
-            tokens = self.tokenizer.convert_ids_to_tokens(token_ids)
+            tokens = tokenizer.convert_ids_to_tokens(token_ids)
             offsets = None
 
             if request.return_offsets:
