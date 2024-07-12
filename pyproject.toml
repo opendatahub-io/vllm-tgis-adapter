@@ -28,9 +28,9 @@ dynamic = ["version"]
 dependencies = [
   "vllm>=0.5.1",
   "prometheus_client==0.20.0",
-  "grpcio==1.62.2",
-  "grpcio-health-checking==1.62.2",
-  "grpcio-reflection==1.62.2",
+  "grpcio==1.65.0",
+  "grpcio-health-checking==1.65.0",
+  "grpcio-reflection==1.65.0",
   "transformers",
   "accelerate==0.31.0",
   "hf-transfer==0.1.6",
@@ -59,7 +59,7 @@ dev = [
   "vllm_tgis_adapter[tests]",
   "ruff==0.5.1",
   "mypy==1.10.1",
-  "types-protobuf==5.26.0.20240422",
+  "types-protobuf==5.27.0.20240626",
   "types-requests==2.32.0.20240602"
 ]
 flash_attn = [
