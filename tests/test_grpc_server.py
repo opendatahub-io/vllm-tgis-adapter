@@ -48,3 +48,9 @@ def test_batched_generation_request(grpc_client, grpc_server_thread_port):
 
     assert len(responses) == 2
     assert all(response.text for response in responses)
+
+
+def test_lora_request(grpc_client, lora_adapter_name):
+    response = grpc_client.make_request("hello", adapter_id=lora_adapter_name)
+
+    assert response.text

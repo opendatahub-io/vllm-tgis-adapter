@@ -117,6 +117,7 @@ class GrpcClient:
         text: str | list[str],
         model_id: str | None = None,
         max_new_tokens: int = 10,
+        adapter_id: str | None = None,
     ) -> GenerationResponse | Sequence[GenerationResponse]:
         if single_request := isinstance(text, str):
             text = [text]
@@ -127,6 +128,7 @@ class GrpcClient:
             params=Parameters(
                 stopping=StoppingCriteria(max_new_tokens=max_new_tokens),
             ),
+            adapter_id=adapter_id,
         )
 
         response = self.generation_service_stub.Generate(
