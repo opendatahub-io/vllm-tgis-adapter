@@ -624,7 +624,18 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self, adapter_kwargs: dict[str, Any]
     ) -> PreTrainedTokenizer:
         lora_request = adapter_kwargs.get("lora_request")
-        return await self.engine.get_tokenizer(lora_request)
+        try:
+            return await self.engine.get_tokenizer(lora_request)
+        except TypeError as exc:
+            # vllm <= 0.5.2
+            if "takes 1 positional argument but 2 were given" not in str(exc):
+                raise
+
+            return (
+                await self.engine.engine.get_tokenizer_group().get_lora_tokenizer_async(
+                    lora_request
+                )
+            )
 
     @staticmethod
     def _convert_reason(
