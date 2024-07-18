@@ -41,6 +41,7 @@ from vllm_tgis_adapter.tgis_utils.metrics import (
     ServiceMetrics,
     TGISStatLogger,
 )
+from vllm_tgis_adapter.tgis_utils.monkey_patch import monkey_patch_prompt_adapter
 
 from .pb import generation_pb2_grpc
 from .pb.generation_pb2 import DESCRIPTOR as _GENERATION_DESCRIPTOR
@@ -57,7 +58,7 @@ from .pb.generation_pb2 import (
 from .validation import validate_input, validate_params
 
 try:
-    from .adapters import AdapterStore, validate_adapters
+    from .adapters import AdapterStore, PeftTypes, validate_adapters
 except ImportError:
     adapters_available = False
 else:
@@ -189,13 +190,25 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         # Temporary to validate parameters currently broken with PP
         self.pipeline_parallel = args.pipeline_parallel_size > 1
 
+        enabled_adapters = set()
+        if args.enable_lora:
+            enabled_adapters.add(PeftTypes.LORA)
+        if args.enable_prompt_adapter:
+            enabled_adapters.add(PeftTypes.PROMPT_TUNING)
+
         # Backwards compatibility for TGIS: PREFIX_STORE_PATH
         adapter_cache_path = args.adapter_cache or args.prefix_store_path
         self.adapter_store = (
-            AdapterStore(cache_path=adapter_cache_path, adapters={})
+            AdapterStore(
+                cache_path=adapter_cache_path,
+                adapters={},
+                enabled_adapters=enabled_adapters,
+            )
             if adapter_cache_path
             else None
         )
+        monkey_patch_prompt_adapter()
+
         self.health_servicer = health_servicer
 
     async def post_init(self) -> None:

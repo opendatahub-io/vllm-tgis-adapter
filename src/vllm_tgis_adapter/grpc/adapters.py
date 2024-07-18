@@ -11,9 +11,11 @@ import concurrent.futures
 import dataclasses
 import json
 import re
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import torch
 from vllm.lora.request import LoRARequest
 from vllm.prompt_adapter.request import PromptAdapterRequest
 
@@ -28,7 +30,13 @@ if TYPE_CHECKING:
 
 global_thread_pool = None  # used for loading adapter files from disk
 
+
 VALID_ADAPTER_ID_PATTERN = re.compile("[/\\w\\-]+")
+
+
+class PeftTypes(str, Enum):
+    LORA = "LORA"
+    PROMPT_TUNING = "PROMPT_TUNING"
 
 
 @dataclasses.dataclass
@@ -44,6 +52,7 @@ class AdapterStore:
     cache_path: str  # Path to local store of adapters to load from
     adapters: dict[str, AdapterMetadata]
     next_unique_id: int = 1
+    enabled_adapters: set[PeftTypes] = dataclasses.field(default_factory=set)
 
 
 async def validate_adapters(
@@ -67,7 +76,7 @@ async def validate_adapters(
         adapter_id = request.prefix_id
 
     if adapter_id and not adapter_store:
-        TGISValidationError.AdaptersDisabled.error()
+        TGISValidationError.NoAdapterStoreConfigured.error()
 
     if not adapter_id or not adapter_store:
         return {}
@@ -100,14 +109,20 @@ async def validate_adapters(
         adapter_store.adapters[adapter_id] = adapter_metadata
 
     # Build the proper vllm request object
-    if adapter_metadata.adapter_type == "LORA":
+    if adapter_metadata.adapter_type == PeftTypes.LORA:
+        if PeftTypes.LORA not in adapter_store.enabled_adapters:
+            TGISValidationError.AdaptersDisabled.error("lora", "--enable-lora")
         lora_request = LoRARequest(
             lora_name=adapter_id,
             lora_int_id=adapter_metadata.unique_id,
             lora_local_path=adapter_metadata.full_path,
         )
         return {"lora_request": lora_request}
-    if adapter_metadata.adapter_type == "PROMPT_TUNING":
+    if adapter_metadata.adapter_type == PeftTypes.PROMPT_TUNING:
+        if PeftTypes.PROMPT_TUNING not in adapter_store.enabled_adapters:
+            TGISValidationError.AdaptersDisabled.error(
+                "prompt_tuning", "--enable-prompt-adapter"
+            )
         prompt_adapter_request = PromptAdapterRequest(
             prompt_adapter_id=adapter_metadata.unique_id,
             prompt_adapter_name=adapter_id,
@@ -135,10 +150,20 @@ def _load_adapter_config_from_file(adapter_id: str, adapter_path: str) -> dict:
         )
 
     adapter_config_path = Path(adapter_path) / "adapter_config.json"
-    if not Path(adapter_config_path).exists():
+    decoder_pt_path = Path(adapter_path) / "decoder.pt"
+    if not Path(adapter_config_path).exists() and not Path(decoder_pt_path).exists():
         TGISValidationError.AdapterNotFound.error(
-            adapter_id, "invalid adapter: no adapter_config.json found"
+            adapter_id, "No supported adapter format found"
         )
+
+    if Path(decoder_pt_path).exists():
+        # Big assumption: This is a prompt-tuned adapter
+        # Sad: Need to know # virtual tokens up front here
+        prompt_embedding = torch.load(
+            decoder_pt_path, weights_only=True, map_location="cpu"
+        )
+        num_virtual_tokens = prompt_embedding.shape[0]
+        return {"peft_type": "PROMPT_TUNING", "num_virtual_tokens": num_virtual_tokens}
 
     # NB: blocks event loop
     with open(adapter_config_path) as adapter_config_file:
