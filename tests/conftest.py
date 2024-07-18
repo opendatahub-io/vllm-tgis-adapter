@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 import requests
+import vllm
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
@@ -38,11 +39,51 @@ def monkeysession():
 
 
 @pytest.fixture(scope="session")
-def args(
-    monkeysession, grpc_server_thread_port, http_server_thread_port
+def lora_enabled():
+    # lora does not work on cpu
+    return not vllm.config.is_cpu()
+
+
+@pytest.fixture(scope="session")
+def requires_lora(lora_enabled):  # noqa: PT004
+    if not lora_enabled:
+        pytest.skip(reason="Lora is not enabled. (disabled on cpu)")
+
+
+@pytest.fixture(scope="session")
+def lora_adapter_name(requires_lora):
+    return "lora-test"
+
+
+@pytest.fixture(scope="session")
+def lora_adapter_path(requires_lora):
+    from huggingface_hub import snapshot_download
+
+    path = snapshot_download(repo_id="yard1/llama-2-7b-sql-lora-test")
+    return path
+
+
+@pytest.fixture(scope="session")
+def args(  # noqa: PLR0913
+    monkeysession,
+    grpc_server_thread_port,
+    http_server_thread_port,
+    lora_enabled,
+    lora_adapter_name,
+    lora_adapter_path,
 ) -> argparse.Namespace:
     """Return parsed CLI arguments for the adapter/vLLM."""
     # avoid parsing pytest arguments as vllm/vllm_tgis_adapter arguments
+
+    extra_args: list[str] = []
+    if lora_enabled:
+        extra_args.extend(
+            (
+                "--enable-lora",
+                f"--lora-modules={lora_adapter_name}={lora_adapter_path}",
+            )
+        )
+
     monkeysession.setattr(
         sys,
         "argv",
@@ -50,6 +91,7 @@ def args(
             "__main__.py",
             f"--grpc-port={grpc_server_thread_port}",
             f"--port={http_server_thread_port}",
+            *extra_args,
         ],
     )
 
