@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import os
 
+from vllm.utils import FlexibleArgumentParser
+
 from vllm_tgis_adapter.grpc.validation import MAX_TOP_N_TOKENS
 from vllm_tgis_adapter.logging import init_logger
 
@@ -24,7 +26,7 @@ def _switch_action_default(action: argparse.Action) -> None:
         action.default = val
 
 
-class EnvVarArgumentParser(argparse.ArgumentParser):
+class EnvVarArgumentParser(FlexibleArgumentParser):
     """Allows env var fallback for all args."""
 
     class _EnvVarHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
