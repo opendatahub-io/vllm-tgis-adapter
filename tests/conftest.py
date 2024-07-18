@@ -11,6 +11,7 @@ from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.usage.usage_lib import UsageContext
+from vllm.utils import FlexibleArgumentParser
 
 from vllm_tgis_adapter.__main__ import run_http_server
 from vllm_tgis_adapter.grpc import run_grpc_server
@@ -52,7 +53,8 @@ def args(
         ],
     )
 
-    parser = EnvVarArgumentParser(parser=make_arg_parser())
+    parser = FlexibleArgumentParser("testing parser")
+    parser = EnvVarArgumentParser(parser=make_arg_parser(parser))
     parser = add_tgis_args(parser)
     args = postprocess_tgis_args(parser.parse_args())
 

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import fastapi
 import vllm
+from fastapi import APIRouter
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -21,19 +22,23 @@ from uvicorn import Server as UvicornServer
 from vllm import envs
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
-from vllm.entrypoints.openai.api_server import app
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.entrypoints.openai.protocol import (  # noqa: TCH002 # pydantic needs to access these annotations
     ChatCompletionRequest,
     ChatCompletionResponse,
     CompletionRequest,
+    DetokenizeRequest,
+    DetokenizeResponse,
     EmbeddingRequest,
     ErrorResponse,
+    TokenizeRequest,
+    TokenizeResponse,
 )
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
 from vllm.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
 from vllm.usage.usage_lib import UsageContext
+from vllm.utils import FlexibleArgumentParser
 
 from .grpc import run_grpc_server
 from .logging import init_logger
@@ -45,18 +50,30 @@ if TYPE_CHECKING:
 
     from vllm.config import ModelConfig
 
+
+try:
+    from vllm.entrypoints.openai.serving_tokenization import (
+        OpenAIServingTokenization,  # noqa: TCH002
+    )
+except ImportError:  #  vllm<=0.5.2
+    has_tokenization = False
+else:
+    has_tokenization = True
+
 TIMEOUT_KEEP_ALIVE = 5  # seconds
 
 openai_serving_chat: OpenAIServingChat
 openai_serving_completion: OpenAIServingCompletion
 openai_serving_embedding: OpenAIServingEmbedding
+if has_tokenization:
+    openai_serving_tokenization: OpenAIServingTokenization
 
 logger = init_logger(__name__)
 
 _running_tasks: set[asyncio.Task] = set()
 
 
-router = fastapi.APIRouter()
+router = APIRouter()
 
 # Add prometheus asgi middleware to route /metrics requests
 route = Mount("/metrics", make_asgi_app())
@@ -72,15 +89,42 @@ async def health() -> Response:
     return Response(status_code=200)
 
 
+if has_tokenization:
+    assert has_tokenization
+
+    @router.post("/tokenize")
+    async def tokenize(request: TokenizeRequest) -> JSONResponse:
+        generator = await openai_serving_tokenization.create_tokenize(request)  # noqa: F821
+        if isinstance(generator, ErrorResponse):
+            return JSONResponse(
+                content=generator.model_dump(),
+                status_code=generator.code,
+            )
+        assert isinstance(generator, TokenizeResponse)
+        return JSONResponse(content=generator.model_dump())
+
+    @router.post("/detokenize")
+    async def detokenize(request: DetokenizeRequest) -> JSONResponse:
+        generator = await openai_serving_tokenization.create_detokenize(request)  # noqa: F821
+        if isinstance(generator, ErrorResponse):
+            return JSONResponse(
+                content=generator.model_dump(),
+                status_code=generator.code,
+            )
+
+        assert isinstance(generator, DetokenizeResponse)
+        return JSONResponse(content=generator.model_dump())
+
+
 @router.get("/v1/models")
 async def show_available_models() -> JSONResponse:
-    models = await openai_serving_chat.show_available_models()
+    models = await openai_serving_completion.show_available_models()
     return JSONResponse(content=models.model_dump())
 
 
 @router.get("/version")
 async def show_version() -> JSONResponse:
-    ver = {"version": vllm.__version__}
+    ver = {"version": vllm.__version__, "commit": vllm.__commit__}
     return JSONResponse(content=ver)
 
 
@@ -89,11 +133,15 @@ async def create_chat_completion(
     request: ChatCompletionRequest,
     raw_request: fastapi.Request,
 ) -> JSONResponse:
-    generator = await openai_serving_chat.create_chat_completion(request, raw_request)
+    generator = await openai_serving_chat.create_chat_completion(
+        request,
+        raw_request,
+    )
     if isinstance(generator, ErrorResponse):
         return JSONResponse(content=generator.model_dump(), status_code=generator.code)
     if request.stream:
         return StreamingResponse(content=generator, media_type="text/event-stream")
+
     assert isinstance(generator, ChatCompletionResponse)
     return JSONResponse(content=generator.model_dump())
 
@@ -102,7 +150,10 @@ async def create_chat_completion(
 async def create_completion(request: CompletionRequest, raw_request: fastapi.Request):  # noqa: ANN201
     generator = await openai_serving_completion.create_completion(request, raw_request)
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(content=generator.model_dump(), status_code=generator.code)
+        return JSONResponse(
+            content=generator.model_dump(),
+            status_code=generator.code,
+        )
     if request.stream:
         return StreamingResponse(content=generator, media_type="text/event-stream")
     return JSONResponse(content=generator.model_dump())
@@ -116,7 +167,7 @@ async def create_embedding(request: EmbeddingRequest, raw_request: fastapi.Reque
     return JSONResponse(content=generator.model_dump())
 
 
-def build_app(  # noqa: C901 # FIXME: waiting on https://github.com/vllm-project/vllm/pull/5090 to get rid of this
+def build_app(  # noqa: C901
     engine: AsyncLLMEngine, args: argparse.Namespace
 ) -> fastapi.FastAPI:
     @asynccontextmanager
@@ -148,7 +199,10 @@ def build_app(  # noqa: C901 # FIXME: waiting on https://github.com/vllm-project
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_, exc):  # noqa: ANN001, ANN202
         err = openai_serving_chat.create_error_response(message=str(exc))
-        return JSONResponse(err.model_dump(), status_code=HTTPStatus.BAD_REQUEST)
+        return JSONResponse(
+            err.model_dump(),
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
 
     if token := envs.VLLM_API_KEY or args.api_key:
 
@@ -160,7 +214,10 @@ def build_app(  # noqa: C901 # FIXME: waiting on https://github.com/vllm-project
             if not request.url.path.startswith(f"{root_path}/v1"):
                 return await call_next(request)
             if request.headers.get("Authorization") != "Bearer " + token:
-                return JSONResponse(content={"error": "Unauthorized"}, status_code=401)
+                return JSONResponse(
+                    content={"error": "Unauthorized"},
+                    status_code=401,
+                )
             return await call_next(request)
 
     for middleware in args.middleware:
@@ -203,17 +260,12 @@ async def run_http_server(
         args.chat_template,
     )
 
-    kwargs = {}
-    # prompt adapter arg required for vllm >0.5.1
-    if hasattr(args, "prompt_adapters"):
-        kwargs = {"prompt_adapters": args.prompt_adapters}
-
     openai_serving_completion = OpenAIServingCompletion(
         engine,
         model_config,
         served_model_names,
         args.lora_modules,
-        **kwargs,
+        prompt_adapters=args.prompt_adapters,
     )
     openai_serving_embedding = OpenAIServingEmbedding(
         engine, model_config, served_model_names
@@ -240,13 +292,19 @@ async def run_http_server(
 
 
 if __name__ == "__main__":
+    parser = FlexibleArgumentParser("vLLM TGIS GRPC + OpenAI Rest api server")
     # convert to our custom env var arg parser
-    parser = EnvVarArgumentParser(parser=make_arg_parser())
+    parser = EnvVarArgumentParser(parser=make_arg_parser(parser))
     parser = add_tgis_args(parser)
     args = postprocess_tgis_args(parser.parse_args())
     assert args is not None
 
-    logger.info("vLLM version %s", vllm.__version__)
+    version_info = (
+        f"{vllm.__version__}" + vllm.__commit__
+        if vllm.__commit__ != "COMMIT_HASH_PLACEHOLDER"
+        else "unknown"
+    )
+    logger.info("vLLM version %s", version_info)
     logger.info("args: %s", args)
 
     engine_args = AsyncEngineArgs.from_cli_args(args)
@@ -281,19 +339,6 @@ if __name__ == "__main__":
     else:
         # When using single vLLM without engine_use_ray
         model_config = asyncio.run(engine.get_model_config())
-
-    app.root_path = args.root_path
-    uvicorn_config = UvicornConfig(
-        app=app,
-        host=args.host,
-        port=args.port,
-        log_level=args.uvicorn_log_level,
-        timeout_keep_alive=TIMEOUT_KEEP_ALIVE,
-        ssl_keyfile=args.ssl_keyfile,
-        ssl_certfile=args.ssl_certfile,
-        ssl_ca_certs=args.ssl_ca_certs,
-        ssl_cert_reqs=args.ssl_cert_reqs,
-    )
 
     if event_loop is None:
         event_loop = asyncio.new_event_loop()
