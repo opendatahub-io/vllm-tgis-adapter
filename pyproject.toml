@@ -52,7 +52,8 @@ tests = [
   "pytest==8.2.2",
   "pytest-cov==5.0.0",
   "pytest-mock==3.14.0",
-  "requests==2.32.3"
+  "requests==2.32.3",
+  "peft"
 ]
 dev = [
   "vllm_tgis_adapter[tests]",
