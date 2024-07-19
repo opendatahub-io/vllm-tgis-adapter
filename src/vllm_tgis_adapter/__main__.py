@@ -75,11 +75,13 @@ _running_tasks: set[asyncio.Task] = set()
 
 router = APIRouter()
 
-# Add prometheus asgi middleware to route /metrics requests
-route = Mount("/metrics", make_asgi_app())
-# Workaround for 307 Redirect for /metrics
-route.path_regex = re.compile("^/metrics(?P<path>.*)$")
-router.routes.append(route)
+
+def mount_metrics(app: fastapi.FastAPI) -> None:
+    # Add prometheus asgi middleware to route /metrics requests
+    metrics_route = Mount("/metrics", make_asgi_app())
+    # Workaround for 307 Redirect for /metrics
+    metrics_route.path_regex = re.compile("^/metrics(?P<path>.*)$")
+    app.routes.append(metrics_route)
 
 
 @router.get("/health")
@@ -187,6 +189,8 @@ def build_app(  # noqa: C901
     app = fastapi.FastAPI(lifespan=lifespan)
     app.include_router(router)
     app.root_path = args.root_path
+
+    mount_metrics(app)
 
     app.add_middleware(
         CORSMiddleware,
