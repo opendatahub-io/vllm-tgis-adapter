@@ -78,9 +78,11 @@ def validate_input(
         )
 
 
-def validate_params(  # noqa: C901
+def validate_params(  # noqa: C901 PLR0912
     params: Parameters,
     max_max_new_tokens: int,
+    *,
+    pipeline_parallel: bool = False,
 ) -> None:
     """Raise ValueError from the TGISValidationError enum if Parameters is invalid."""
     # TODO: split into checks that are covered by vllm.SamplingParams
@@ -90,6 +92,14 @@ def validate_params(  # noqa: C901
     sampling = params.sampling
     stopping = params.stopping
     decoding = params.decoding
+
+    # Temporary validation -- this will be removed once we fix use of seed
+    # with pipeline parallel
+    if pipeline_parallel and sampling.HasField("seed") and sampling.seed:
+        raise ValueError(
+            "seed parameter is currently not supported for "
+            "pipeline parallel model deployments"
+        )
 
     # Decoding parameter checks
     if decoding.HasField("length_penalty") and not (
