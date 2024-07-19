@@ -27,3 +27,8 @@ def test_completions(http_server_url, _http_server):
     generated_text = completion["choices"][0]["text"]
 
     assert generated_text
+
+
+def test_metrics(http_server_url, _http_server):
+    response = requests.get(f"{http_server_url}/metrics")
+    response.raise_for_status()
