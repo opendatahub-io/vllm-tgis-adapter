@@ -293,10 +293,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 res.outputs[0],
                 resp_options,
                 max_is_token_limit=max_is_token_limit[i],
+                tokenizer=tokenizer,
                 time_limit_reached=time_limit_reached,
             )
             response = self._convert_input_details(
-                res, resp_options, sampling_params, response
+                res, resp_options, sampling_params, response, tokenizer
             )
             logs.log_response(
                 request=request,
@@ -368,7 +369,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             if first_response is None:
                 service_metrics.observe_queue_time(result)
                 first_response = self._convert_input_details(
-                    result, resp_options, sampling_params, GenerationResponse()
+                    result,
+                    resp_options,
+                    sampling_params,
+                    GenerationResponse(),
+                    tokenizer,
                 )
                 last_response = first_response
                 yield first_response
@@ -384,6 +389,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 output,
                 resp_options,
                 max_is_token_limit=max_is_tok_limit,
+                tokenizer=tokenizer,
                 time_limit_reached=time_limit_reached,
                 text_start_offset=last_output_length,
                 token_start_offset=last_token_count,
@@ -420,12 +426,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         )
         service_metrics.observe_generation_success(start_time=start_time)
 
-    def _convert_input_details(
+    def _convert_input_details(  # noqa: PLR0913
         self,
         result: RequestOutput,
         resp_options: ResponseOptions,
         sampling_params: SamplingParams,
         response: GenerationResponse,
+        tokenizer: PreTrainedTokenizer,
     ) -> GenerationResponse:
         response.input_token_count = len(result.prompt_token_ids)
         if resp_options.input_tokens:
@@ -435,6 +442,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 include_logprobs=resp_options.token_logprobs,
                 include_ranks=resp_options.token_ranks,
                 top_n_tokens=resp_options.top_n_tokens,
+                tokenizer=tokenizer,
                 token_infos=response.input_tokens,
             )
 
@@ -453,6 +461,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         resp_options: ResponseOptions,
         *,
         max_is_token_limit: bool,
+        tokenizer: PreTrainedTokenizer,
         time_limit_reached: bool = False,
         text_start_offset: int = 0,
         token_start_offset: int = 0,
@@ -471,11 +480,12 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         if resp_options.generated_tokens:
             self._convert_tokens(
-                output.token_ids,
+                list(output.token_ids),
                 output.logprobs,
                 include_logprobs=resp_options.token_logprobs,
                 include_ranks=resp_options.token_ranks,
                 top_n_tokens=resp_options.top_n_tokens,
+                tokenizer=tokenizer,
                 token_infos=response.tokens,
                 token_start_offset=token_start_offset,
             )
