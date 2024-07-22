@@ -225,6 +225,9 @@ message TokenInfo {
 
 message BatchedTokenizeRequest {
   string model_id = 1;
+  // Deprecated in favor of adapter_id
+  optional string prefix_id = 6;
+  optional string adapter_id = 7;
   repeated TokenizeRequest requests = 2;
   bool return_tokens = 3;
   bool return_offsets = 4;

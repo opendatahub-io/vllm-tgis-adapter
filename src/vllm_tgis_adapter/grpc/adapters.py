@@ -22,6 +22,7 @@ from .validation import TGISValidationError
 if TYPE_CHECKING:
     from vllm.entrypoints.grpc.pb.generation_pb2 import (
         BatchedGenerationRequest,
+        BatchedTokenizeRequest,
         SingleGenerationRequest,
     )
 
@@ -46,7 +47,9 @@ class AdapterStore:
 
 
 async def validate_adapters(
-    request: SingleGenerationRequest | BatchedGenerationRequest,
+    request: SingleGenerationRequest
+    | BatchedGenerationRequest
+    | BatchedTokenizeRequest,
     adapter_store: AdapterStore | None,
 ) -> dict[str, LoRARequest | PromptAdapterRequest]:
     """Validate the adapters.
