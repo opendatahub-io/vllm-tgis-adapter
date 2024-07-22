@@ -617,7 +617,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self,
         request: SingleGenerationRequest
         | BatchedGenerationRequest
-        | TokenizeResponse
         | BatchedTokenizeRequest,
         context: ServicerContext,
     ) -> dict[str, LoRARequest | PromptAdapterRequest]:
