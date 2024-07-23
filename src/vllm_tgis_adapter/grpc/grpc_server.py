@@ -20,7 +20,7 @@ from grpc_reflection.v1alpha import reflection
 from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.async_llm_engine import _AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
-from vllm.inputs import TextTokensPrompt
+from vllm.inputs import LLMInputs
 from vllm.tracing import (
     contains_trace_headers,
     extract_trace_headers,
@@ -243,7 +243,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 sampling_params, truncate_input_tokens, req.text, tokenizer, context
             )
 
-            inputs = TextTokensPrompt(
+            inputs = LLMInputs(
                 prompt=req.text,
                 prompt_token_ids=input_ids,
             )
@@ -344,8 +344,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             context,
         )
 
-        inputs = TextTokensPrompt(
-            prompt=request.request.text, prompt_token_ids=input_ids
+        inputs = LLMInputs(
+            prompt=request.request.text,
+            prompt_token_ids=input_ids,
         )
 
         result_generator = self.engine.generate(
@@ -639,19 +640,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     async def _get_tokenizer(
         self, adapter_kwargs: dict[str, Any]
     ) -> PreTrainedTokenizer:
-        lora_request = adapter_kwargs.get("lora_request")
-        try:
-            return await self.engine.get_tokenizer(lora_request)
-        except TypeError as exc:
-            # vllm <= 0.5.2
-            if "takes 1 positional argument but 2 were given" not in str(exc):
-                raise
-
-            return (
-                await self.engine.engine.get_tokenizer_group().get_lora_tokenizer_async(
-                    lora_request
-                )
-            )
+        return await self.engine.get_tokenizer(
+            adapter_kwargs.get("lora_request"),
+        )
 
     @staticmethod
     def _convert_reason(

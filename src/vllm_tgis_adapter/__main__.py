@@ -22,6 +22,7 @@ from uvicorn import Server as UvicornServer
 from vllm import envs
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
+from vllm.entrypoints.logger import RequestLogger
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.entrypoints.openai.protocol import (  # noqa: TCH002 # pydantic needs to access these annotations
     ChatCompletionRequest,
@@ -37,6 +38,9 @@ from vllm.entrypoints.openai.protocol import (  # noqa: TCH002 # pydantic needs 
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
 from vllm.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
+from vllm.entrypoints.openai.serving_tokenization import (
+    OpenAIServingTokenization,
+)
 from vllm.usage.usage_lib import UsageContext
 from vllm.utils import FlexibleArgumentParser
 
@@ -51,22 +55,12 @@ if TYPE_CHECKING:
     from vllm.config import ModelConfig
 
 
-try:
-    from vllm.entrypoints.openai.serving_tokenization import (
-        OpenAIServingTokenization,  # noqa: TCH002
-    )
-except ImportError:  #  vllm<=0.5.2
-    has_tokenization = False
-else:
-    has_tokenization = True
-
 TIMEOUT_KEEP_ALIVE = 5  # seconds
 
 openai_serving_chat: OpenAIServingChat
 openai_serving_completion: OpenAIServingCompletion
 openai_serving_embedding: OpenAIServingEmbedding
-if has_tokenization:
-    openai_serving_tokenization: OpenAIServingTokenization
+openai_serving_tokenization: OpenAIServingTokenization
 
 logger = init_logger(__name__)
 
@@ -91,31 +85,29 @@ async def health() -> Response:
     return Response(status_code=200)
 
 
-if has_tokenization:
-    assert has_tokenization
+@router.post("/tokenize")
+async def tokenize(request: TokenizeRequest) -> JSONResponse:
+    generator = await openai_serving_tokenization.create_tokenize(request)
+    if isinstance(generator, ErrorResponse):
+        return JSONResponse(
+            content=generator.model_dump(),
+            status_code=generator.code,
+        )
+    assert isinstance(generator, TokenizeResponse)
+    return JSONResponse(content=generator.model_dump())
 
-    @router.post("/tokenize")
-    async def tokenize(request: TokenizeRequest) -> JSONResponse:
-        generator = await openai_serving_tokenization.create_tokenize(request)  # noqa: F821
-        if isinstance(generator, ErrorResponse):
-            return JSONResponse(
-                content=generator.model_dump(),
-                status_code=generator.code,
-            )
-        assert isinstance(generator, TokenizeResponse)
-        return JSONResponse(content=generator.model_dump())
 
-    @router.post("/detokenize")
-    async def detokenize(request: DetokenizeRequest) -> JSONResponse:
-        generator = await openai_serving_tokenization.create_detokenize(request)  # noqa: F821
-        if isinstance(generator, ErrorResponse):
-            return JSONResponse(
-                content=generator.model_dump(),
-                status_code=generator.code,
-            )
+@router.post("/detokenize")
+async def detokenize(request: DetokenizeRequest) -> JSONResponse:
+    generator = await openai_serving_tokenization.create_detokenize(request)
+    if isinstance(generator, ErrorResponse):
+        return JSONResponse(
+            content=generator.model_dump(),
+            status_code=generator.code,
+        )
 
-        assert isinstance(generator, DetokenizeResponse)
-        return JSONResponse(content=generator.model_dump())
+    assert isinstance(generator, DetokenizeResponse)
+    return JSONResponse(content=generator.model_dump())
 
 
 @router.get("/v1/models")
@@ -251,28 +243,47 @@ async def run_http_server(
     else:
         served_model_names = [args.model]
 
+    if args.disable_log_requests:
+        request_logger = None
+    else:
+        request_logger = RequestLogger(max_log_len=args.max_log_len)
+
     global openai_serving_chat  # noqa: PLW0603
     global openai_serving_completion  # noqa: PLW0603
     global openai_serving_embedding  # noqa: PLW0603
+    global openai_serving_tokenization  # noqa: PLW0603
 
     openai_serving_chat = OpenAIServingChat(
         engine,
         model_config,
         served_model_names,
         args.response_role,
-        args.lora_modules,
-        args.chat_template,
+        lora_modules=args.lora_modules,
+        prompt_adapters=args.prompt_adapters,
+        request_logger=request_logger,
+        chat_template=args.chat_template,
     )
-
     openai_serving_completion = OpenAIServingCompletion(
         engine,
         model_config,
         served_model_names,
-        args.lora_modules,
+        lora_modules=args.lora_modules,
         prompt_adapters=args.prompt_adapters,
+        request_logger=request_logger,
     )
     openai_serving_embedding = OpenAIServingEmbedding(
-        engine, model_config, served_model_names
+        engine,
+        model_config,
+        served_model_names,
+        request_logger=request_logger,
+    )
+    openai_serving_tokenization = OpenAIServingTokenization(
+        engine,
+        model_config,
+        served_model_names,
+        lora_modules=args.lora_modules,
+        request_logger=request_logger,
+        chat_template=args.chat_template,
     )
     app.root_path = args.root_path
     config = UvicornConfig(
