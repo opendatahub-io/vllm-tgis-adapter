@@ -345,7 +345,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             prompt=request.request.text,
             prompt_token_ids=input_ids,
         )
-
+        kwargs = {}
+        is_tracing_enabled = await self.engine.is_tracing_enabled()
+        headers = dict(context.invocation_metadata())
+        if is_tracing_enabled:
+            kwargs["trace_headers"] = extract_trace_headers(headers)
+        elif contains_trace_headers(headers):
+            log_tracing_disabled_warning()
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
             # re-tokenized when `prompt_token_ids` is supplied
@@ -353,6 +359,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             sampling_params=sampling_params,
             request_id=request_id,
             **adapter_kwargs,
+            **kwargs,
         )
 
         resp_options = request.params.response
