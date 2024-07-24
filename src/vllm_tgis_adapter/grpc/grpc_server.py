@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import signal
 import time
 import uuid
 from collections.abc import Callable, Coroutine
@@ -103,6 +104,18 @@ async def _handle_exception(
 ) -> None:
     context: ServicerContext = kwargs.get("context", None) or args[-1]
     is_generate_fn = "generate" in func.__name__.lower()
+
+    # self.engine on the servicer
+    engine = args[0].engine
+    # If the engine has died, then the server cannot process any further
+    # requests. We want to immediately stop the process in this case to avoid
+    # any downtime while waiting for probes to fail.
+    if engine.errored and not engine.is_running:
+        # awaiting a server.stop() in here won't work because we're in
+        # the context of a running request.
+        # SIGTERM is a bit rough, but will signal the process to gracefully
+        # shut down both the grpc and http servers.
+        os.kill(os.getpid(), signal.SIGTERM)
 
     # First just try to replicate the TGIS-style log messages
     # for generate_* rpcs
