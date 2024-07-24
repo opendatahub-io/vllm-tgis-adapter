@@ -51,22 +51,16 @@ if TYPE_CHECKING:
     from vllm.config import ModelConfig
 
 
-try:
-    from vllm.entrypoints.openai.serving_tokenization import (
-        OpenAIServingTokenization,  # noqa: TCH002
-    )
-except ImportError:  #  vllm<=0.5.2
-    has_tokenization = False
-else:
-    has_tokenization = True
+from vllm.entrypoints.openai.serving_tokenization import (
+    OpenAIServingTokenization,  # noqa: TCH002
+)
 
 TIMEOUT_KEEP_ALIVE = 5  # seconds
 
 openai_serving_chat: OpenAIServingChat
 openai_serving_completion: OpenAIServingCompletion
 openai_serving_embedding: OpenAIServingEmbedding
-if has_tokenization:
-    openai_serving_tokenization: OpenAIServingTokenization
+openai_serving_tokenization: OpenAIServingTokenization
 
 logger = init_logger(__name__)
 
@@ -91,31 +85,29 @@ async def health() -> Response:
     return Response(status_code=200)
 
 
-if has_tokenization:
-    assert has_tokenization
+@router.post("/tokenize")
+async def tokenize(request: TokenizeRequest) -> JSONResponse:
+    generator = await openai_serving_tokenization.create_tokenize(request)  # noqa: F821
+    if isinstance(generator, ErrorResponse):
+        return JSONResponse(
+            content=generator.model_dump(),
+            status_code=generator.code,
+        )
+    assert isinstance(generator, TokenizeResponse)
+    return JSONResponse(content=generator.model_dump())
 
-    @router.post("/tokenize")
-    async def tokenize(request: TokenizeRequest) -> JSONResponse:
-        generator = await openai_serving_tokenization.create_tokenize(request)  # noqa: F821
-        if isinstance(generator, ErrorResponse):
-            return JSONResponse(
-                content=generator.model_dump(),
-                status_code=generator.code,
-            )
-        assert isinstance(generator, TokenizeResponse)
-        return JSONResponse(content=generator.model_dump())
 
-    @router.post("/detokenize")
-    async def detokenize(request: DetokenizeRequest) -> JSONResponse:
-        generator = await openai_serving_tokenization.create_detokenize(request)  # noqa: F821
-        if isinstance(generator, ErrorResponse):
-            return JSONResponse(
-                content=generator.model_dump(),
-                status_code=generator.code,
-            )
+@router.post("/detokenize")
+async def detokenize(request: DetokenizeRequest) -> JSONResponse:
+    generator = await openai_serving_tokenization.create_detokenize(request)  # noqa: F821
+    if isinstance(generator, ErrorResponse):
+        return JSONResponse(
+            content=generator.model_dump(),
+            status_code=generator.code,
+        )
 
-        assert isinstance(generator, DetokenizeResponse)
-        return JSONResponse(content=generator.model_dump())
+    assert isinstance(generator, DetokenizeResponse)
+    return JSONResponse(content=generator.model_dump())
 
 
 @router.get("/v1/models")
