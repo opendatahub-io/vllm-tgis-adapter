@@ -3,19 +3,15 @@ from __future__ import annotations
 import asyncio
 import sys
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, TypeVar
 
 import pytest
 import requests
 import vllm
-from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.cli_args import make_arg_parser
-from vllm.usage.usage_lib import UsageContext
 from vllm.utils import FlexibleArgumentParser
 
-from vllm_tgis_adapter.__main__ import run_http_server
-from vllm_tgis_adapter.grpc import run_grpc_server
+from vllm_tgis_adapter.__main__ import start_servers
 from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
 from vllm_tgis_adapter.healthcheck import health_check
 from vllm_tgis_adapter.tgis_utils.args import (
@@ -24,12 +20,16 @@ from vllm_tgis_adapter.tgis_utils.args import (
     postprocess_tgis_args,
 )
 
-from .utils import get_random_port, wait_until
+from .utils import TaskFailedError, get_random_port, wait_until
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Generator
 
-    from vllm.config import ModelConfig
+    T = TypeVar("T")
+
+    YieldFixture = Generator[T, None, None]
+    ArgFixture = Annotated[T, pytest.fixture]
 
 
 @pytest.fixture(scope="session")
@@ -45,7 +45,7 @@ def lora_available() -> bool:
 
 
 @pytest.fixture(scope="session")
-def lora_adapter_name(request: pytest.FixtureRequest):
+def lora_adapter_name(request: pytest.FixtureRequest) -> str:
     if not request.getfixturevalue("lora_available"):
         pytest.skip("Lora is not available with this configuration")
 
@@ -53,7 +53,7 @@ def lora_adapter_name(request: pytest.FixtureRequest):
 
 
 @pytest.fixture(scope="session")
-def lora_adapter_path(request: pytest.FixtureRequest):
+def lora_adapter_path(request: pytest.FixtureRequest) -> str:
     if not request.getfixturevalue("lora_available"):
         pytest.skip("Lora is not available with this configuration")
 
@@ -64,12 +64,12 @@ def lora_adapter_path(request: pytest.FixtureRequest):
 
 
 @pytest.fixture(scope="session")
-def args(
+def args(  # noqa: PLR0913
     request: pytest.FixtureRequest,
     monkeysession,
-    grpc_server_thread_port,
-    http_server_thread_port,
-    lora_available,
+    grpc_server_port: ArgFixture[int],
+    http_server_port: ArgFixture[int],
+    lora_available: ArgFixture[bool],
 ) -> argparse.Namespace:
     """Return parsed CLI arguments for the adapter/vLLM."""
     # avoid parsing pytest arguments as vllm/vllm_tgis_adapter arguments
@@ -86,8 +86,8 @@ def args(
         "argv",
         [
             "__main__.py",
-            f"--grpc-port={grpc_server_thread_port}",
-            f"--port={http_server_thread_port}",
+            f"--grpc-port={grpc_server_port}",
+            f"--port={http_server_port}",
             *extra_args,
         ],
     )
@@ -101,103 +101,77 @@ def args(
 
 
 @pytest.fixture(scope="session")
-def engine_args(args) -> AsyncEngineArgs:
-    """Return AsyncEngineArgs from cli args."""
-    return AsyncEngineArgs.from_cli_args(args)
-
-
-@pytest.fixture(scope="session")
-def engine(engine_args) -> AsyncLLMEngine:
-    """Return a vLLM engine from the engine args."""
-    engine = AsyncLLMEngine.from_engine_args(
-        engine_args,  # type: ignore[arg-type]
-        usage_context=UsageContext.OPENAI_API_SERVER,
-    )
-    return engine
-
-
-@pytest.fixture(scope="session")
-def model_config(engine) -> ModelConfig:
-    """Return a vLLM ModelConfig."""
-    return asyncio.run(engine.get_model_config())
-
-
-@pytest.fixture(scope="session")
-def grpc_server_thread_port() -> int:
+def grpc_server_port() -> int:
     """Port for the grpc server."""
     return get_random_port()
 
 
 @pytest.fixture(scope="session")
-def grpc_server_url(grpc_server_thread_port) -> str:
-    """Url for the grpc server."""
-    return f"localhost:{grpc_server_thread_port}"
+def grpc_server_address(grpc_server_port: ArgFixture[int]) -> str:
+    """Address for the grpc server."""
+    return f"localhost:{grpc_server_port}"
 
 
 @pytest.fixture(scope="session")
-def _grpc_server(engine, args, grpc_server_url) -> None:
-    """Spins up the grpc server in a background thread."""
-
-    def _health_check():
-        assert health_check(
-            server_url=grpc_server_url,
-            insecure=True,
-            timeout=1,
-            service=TextGenerationService.SERVICE_NAME,
-        )
-
-    loop = asyncio.new_event_loop()
-    task: asyncio.Task | None = None
-
-    def target():
-        nonlocal task
-
-        task = loop.create_task(run_grpc_server(engine, args, disable_log_stats=False))
-        loop.run_until_complete(task)
-
-    t = threading.Thread(target=target)
-    t.start()
-
-    try:
-        wait_until(_health_check)
-        yield
-    finally:
-        task.cancel()
-        t.join()
-
-
-@pytest.fixture(scope="session")
-def http_server_thread_port(scope="session") -> int:
+def http_server_port() -> int:
     """Port for the http server."""
     return get_random_port()
 
 
 @pytest.fixture(scope="session")
-def http_server_url(http_server_thread_port) -> str:
+def http_server_url(http_server_port: ArgFixture[int]) -> str:
     """Url for the http server."""
-    return f"http://localhost:{http_server_thread_port}"
+    return f"http://localhost:{http_server_port}"
 
 
 @pytest.fixture(scope="session")
-def _http_server(engine, model_config, engine_args, args, http_server_url) -> None:
-    """Spins up the http server in a background thread."""
-
-    def _health_check() -> None:
-        requests.get(
-            f"{http_server_url}/health",
-            timeout=1,
-        ).raise_for_status()
-
+def _servers(
+    args: ArgFixture[argparse.Namespace],
+    grpc_server_address: ArgFixture[str],
+    http_server_url: ArgFixture[str],
+    monkeysession,
+) -> YieldFixture[None]:
+    """Run the servers in an asyncio loop in a background thread."""
     global server  # noqa: PLW0602
 
     loop = asyncio.new_event_loop()
 
     task: asyncio.Task | None = None
 
+    def _health_check() -> None:
+        if not task:
+            raise TaskFailedError
+
+        if task.done():
+            exc = task.exception()
+            if exc:
+                raise TaskFailedError from exc
+
+            raise TaskFailedError
+
+        requests.get(
+            f"{http_server_url}/health",
+            timeout=1,
+        ).raise_for_status()
+
+        assert health_check(
+            server_url=grpc_server_address,
+            insecure=True,
+            timeout=1,
+            service=TextGenerationService.SERVICE_NAME,
+        )
+
+    # patch the add_signal_handler method so that instantiating the servers
+    # does not try to modify signal handlers in a child thread, which cannot be done
+    def dummy_signal_handler(*args, **kwargs):
+        pass
+
+    monkeysession.setattr(loop, "add_signal_handler", dummy_signal_handler)
+
     def target():
         nonlocal task
 
-        task = loop.create_task(run_http_server(engine, args, model_config))
+        task = loop.create_task(start_servers(args))
         loop.run_until_complete(task)
 
     t = threading.Thread(target=target)
@@ -207,5 +181,7 @@ def _http_server(engine, model_config, engine_args, args, http_server_url) -> No
         wait_until(_health_check)
         yield
     finally:
-        task.cancel()
+        if task:
+            task.cancel()
+
         t.join()
