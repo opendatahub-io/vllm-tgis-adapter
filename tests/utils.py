@@ -30,6 +30,10 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 
+class TaskFailedError(Exception):
+    pass
+
+
 def get_random_port():
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(("", 0))
@@ -40,8 +44,8 @@ def get_random_port():
 
 def wait_until(
     pred: Callable[..., _T],
-    timeout: float = 30,
-    pause: float = 0.5,
+    timeout: float = 60,
+    pause: float = 5,
 ) -> _T:
     start = time.perf_counter()
     exc = None
@@ -49,10 +53,14 @@ def wait_until(
     while (time.perf_counter() - start) < timeout:
         try:
             value = pred()
+        except TaskFailedError:
+            raise
         except Exception as e:  # noqa: BLE001
+            print(f"Got {e=}")
             exc = e
         else:
             return value
+
         time.sleep(pause)
 
     raise TimeoutError("timed out waiting") from exc
@@ -72,7 +80,7 @@ def get_server_certificate(host: str, port: int) -> str:
         # https://github.com/python/cpython/pull/16820
         return ssl.get_server_certificate((host, port))
 
-    context = ssl.SSLContext()
+    context = ssl.SSLContext()  # type: ignore[unreachable] # false positive for python>=3.10
 
     with (
         socket.create_connection((host, port)) as sock,
@@ -119,6 +127,8 @@ class GrpcClient:
         max_new_tokens: int = 10,
         adapter_id: str | None = None,
     ) -> GenerationResponse | Sequence[GenerationResponse]:
+        # assert model_id  # FIXME: is model_id required?
+
         if single_request := isinstance(text, str):
             text = [text]
 
@@ -146,6 +156,8 @@ class GrpcClient:
         model_id: str | None = None,
         max_new_tokens: int = 10,
     ) -> Generator[GenerationResponse, None, None]:
+        # assert model_id  # FIXME: is model_id required?
+
         request = SingleGenerationRequest(
             model_id=model_id,
             request=GenerationRequest(text=text),
