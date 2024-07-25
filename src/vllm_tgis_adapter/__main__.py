@@ -323,19 +323,6 @@ if __name__ == "__main__":
     logger.info("args: %s", args)
 
     engine_args = AsyncEngineArgs.from_cli_args(args)
-
-    if hasattr(engine_args, "image_input_type") and (  # vllm <= 0.5.0.post1
-        engine_args.image_input_type is not None
-        and engine_args.image_input_type.upper() != "PIXEL_VALUES"
-    ):
-        # Enforce pixel values as image input type for vision language models
-        # when serving with API server
-        raise ValueError(
-            f"Invalid image_input_type: {engine_args.image_input_type}. "
-            "Only --image-input-type 'pixel_values' is supported for serving "
-            "vision language models with the vLLM API server."
-        )
-
     engine = AsyncLLMEngine.from_engine_args(
         engine_args,  # type: ignore[arg-type]
         usage_context=UsageContext.OPENAI_API_SERVER,
