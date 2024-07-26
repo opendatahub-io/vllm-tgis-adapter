@@ -45,7 +45,8 @@ Issues = "https://github.com/opendatahub-io/vllm_tgis_adapter/issues"
 Source = "https://github.com/opendatahub-io/vllm_tgis_adapter"
 
 [project.scripts]
-grpc_healthcheck = "vllm_tgis_adapter.healthcheck:cli"
+grpc-healthcheck = "vllm_tgis_adapter.healthcheck:cli"
+vllm = "vllm_tgis_adapter.tgis_utils.scripts:cli"
 
 [project.optional-dependencies]
 tests = [

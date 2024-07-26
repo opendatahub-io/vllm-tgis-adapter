@@ -2,9 +2,12 @@ from pathlib import Path
 
 import pytest
 from huggingface_hub.utils import LocalEntryNotFoundError
-
-from tgis_utils.hub import (convert_files, download_weights, weight_files,
-                                 weight_hub_files)
+from tgis_utils.hub import (
+    convert_files,
+    download_weights,
+    weight_files,
+    weight_hub_files,
+)
 
 
 def test_convert_files():
@@ -19,7 +22,7 @@ def test_convert_files():
 
     found_st_files = weight_files(model_id)
 
-    assert all([str(p) in found_st_files for p in local_st_files])
+    assert all(str(p) in found_st_files for p in local_st_files)
 
 
 def test_weight_hub_files():
@@ -29,9 +32,7 @@ def test_weight_hub_files():
 
 def test_weight_hub_files_llm():
     filenames = weight_hub_files("bigscience/bloom")
-    assert filenames == [
-        f"model_{i:05d}-of-00072.safetensors" for i in range(1, 73)
-    ]
+    assert filenames == [f"model_{i:05d}-of-00072.safetensors" for i in range(1, 73)]
 
 
 def test_weight_hub_files_empty():
