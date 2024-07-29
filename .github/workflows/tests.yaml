@@ -48,6 +48,10 @@ jobs:
           tool-cache: false
           large-packages: false
           docker-images: false
+      - name: Install vLLM build deps
+        run: |
+          sudo apt update
+          sudo apt install --no-install-recommends -y libnuma-dev
 
       - name: Set up Python ${{ matrix.pyv }}
         uses: actions/setup-python@v5
