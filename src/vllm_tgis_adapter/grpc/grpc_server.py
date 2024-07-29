@@ -85,9 +85,10 @@ _F = TypeVar("_F", Callable, Coroutine)
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
 
-ADD_SPECIAL_TOKENS: str | None = os.getenv("ADD_SPECIAL_TOKENS")
-if ADD_SPECIAL_TOKENS is not None:
-    ADD_SPECIAL_TOKENS = ADD_SPECIAL_TOKENS.lower() not in (0, "false")
+ADD_SPECIAL_TOKENS: bool = os.getenv("ADD_SPECIAL_TOKENS", "true").lower() not in (
+    "0",
+    "false",
+)
 
 
 def with_default(value: _T, default: _T) -> _T:
@@ -752,15 +753,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         max_model_len = self.config.max_model_len
 
-        # Add special tokens based on env var or else only if the tokenizer
-        # does not have a chat template => this is not a chat model
-        add_special_tokens = (
-            ADD_SPECIAL_TOKENS
-            if ADD_SPECIAL_TOKENS is not None
-            else not tokenizer.chat_template
-        )
-
-        tokenizer_kwargs: dict[str, Any] = {"add_special_tokens": add_special_tokens}
+        tokenizer_kwargs: dict[str, Any] = {"add_special_tokens": ADD_SPECIAL_TOKENS}
         if truncate_input_tokens is not None:
             tokenizer_kwargs.update(
                 {
