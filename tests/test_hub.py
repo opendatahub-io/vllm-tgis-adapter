@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 from huggingface_hub.utils import LocalEntryNotFoundError
-from tgis_utils.hub import (
+
+from vllm_tgis_adapter.tgis_utils.hub import (
     convert_files,
     download_weights,
     weight_files,

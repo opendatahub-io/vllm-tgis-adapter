@@ -3,7 +3,6 @@ from __future__ import annotations
 import concurrent
 import datetime
 import json
-import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -15,7 +14,9 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from safetensors.torch import _remove_duplicate_names, load_file, save_file
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+from vllm_tgis_adapter.logging import init_logger
+
+logger = init_logger(__name__)
 
 
 def weight_hub_files(
@@ -84,7 +85,7 @@ def download_weights(
         token=auth_token,
     )
 
-    logger.info("Downloading {len(filenames)} files for model {model_name}")
+    logger.info("Downloading %s files for model %s", len(filenames), model_name)
     executor = ThreadPoolExecutor(max_workers=5)
     futures = [
         executor.submit(download_function, filename=filename) for filename in filenames
@@ -115,7 +116,7 @@ def get_model_path(model_name: str, revision: str | None = None) -> str:
     except ValueError as e:
         err = e
 
-    if Path.isfile(f"{model_name}/{config_file}"):
+    if Path(f"{model_name}/{config_file}").is_file():
         return model_name  # Just treat the model name as an explicit model path
 
     if err is not None:
@@ -127,13 +128,13 @@ def get_model_path(model_name: str, revision: str | None = None) -> str:
 def local_weight_files(model_path: str, extension: str = ".safetensors") -> list:
     """Get the local safetensors filenames."""
     ext = "" if extension is None else extension
-    return Path.glob(f"{model_path}/*{ext}")
+    return list(Path(f"{model_path}").glob(f"*{ext}"))
 
 
 def local_index_files(model_path: str, extension: str = ".safetensors") -> list:
     """Get the local .index.json filename."""
     ext = "" if extension is None else extension
-    return Path.glob(f"{model_path}/*{ext}.index.json")
+    return list(Path(f"{model_path}").glob(f"*{ext}.index.json"))
 
 
 def convert_file(pt_file: Path, sf_file: Path, discard_names: list[str]) -> None:
@@ -157,8 +158,8 @@ def convert_file(pt_file: Path, sf_file: Path, discard_names: list[str]) -> None
     # Force tensors to be contiguous
     loaded = {k: v.contiguous() for k, v in loaded.items()}
 
-    dirname = Path.parent(sf_file)
-    Path(dirname).mkdir(parents=True)
+    dirname = Path(sf_file).parent
+    Path(dirname).mkdir(parents=True, exist_ok=True)
     save_file(loaded, sf_file, metadata=metadata)
     reloaded = load_file(sf_file)
     for k in loaded:
@@ -222,5 +223,8 @@ def convert_files(
         convert_file(pt_file, sf_file, discard_names)
         elapsed = datetime.datetime.now(tz=datetime.UTC) - start
         logger.info(
-            'Converted: [%d] "%s" -- Took: %d', file_count, sf_file.name, elapsed
+            'Converted: [%d] "%s" -- Took: %d seconds',
+            file_count,
+            sf_file.name,
+            elapsed.total_seconds(),
         )
