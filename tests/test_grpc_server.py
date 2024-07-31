@@ -24,7 +24,9 @@ def test_generation_request(grpc_client, grpc_server_thread_port):
     assert response.stop_reason is not None
 
 
-def test_generation_request_stream(grpc_client, grpc_server_thread_port):
+def test_generation_request_stream(
+    grpc_client, prompt_available, grpc_server_thread_port
+):
     streaming_response = grpc_client.make_request_stream(
         "The answer to life the universe and everything is ",
     )
@@ -32,7 +34,7 @@ def test_generation_request_stream(grpc_client, grpc_server_thread_port):
     text_chunks: list[str] = [chunk.text for chunk in streaming_response]
 
     assert text_chunks
-    assert len(text_chunks) == 11
+    assert len(text_chunks) == 6 if prompt_available else 11
     assert "".join(text_chunks)
 
 
@@ -53,4 +55,9 @@ def test_batched_generation_request(grpc_client, grpc_server_thread_port):
 def test_lora_request(grpc_client, lora_adapter_name):
     response = grpc_client.make_request("hello", adapter_id=lora_adapter_name)
 
+    assert response.text
+
+
+def test_prompt_request(grpc_client, prompt_adapter_name):
+    response = grpc_client.make_request("hello", adapter_id=prompt_adapter_name)
     assert response.text

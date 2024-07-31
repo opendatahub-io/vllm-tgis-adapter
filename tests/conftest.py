@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -32,6 +34,9 @@ if TYPE_CHECKING:
     from vllm.config import ModelConfig
 
 
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
 @pytest.fixture(scope="session")
 def monkeysession():
     with pytest.MonkeyPatch.context() as mp:
@@ -40,7 +45,13 @@ def monkeysession():
 
 @pytest.fixture(scope="session")
 def lora_available() -> bool:
-    # lora does not work on cpu
+    # lora does not work with the current set of models
+    return False
+
+
+@pytest.fixture(scope="session")
+def prompt_available() -> bool:
+    # prompt does not work on cpu
     return not vllm.config.is_cpu()
 
 
@@ -53,14 +64,20 @@ def lora_adapter_name(request: pytest.FixtureRequest):
 
 
 @pytest.fixture(scope="session")
+def prompt_adapter_name(request: pytest.FixtureRequest):
+    if not request.getfixturevalue("prompt_available"):
+        pytest.skip("Prompt is not available with this configuration")
+    return "twitter-pa"
+
+
+@pytest.fixture(scope="session")
 def lora_adapter_path(request: pytest.FixtureRequest):
     if not request.getfixturevalue("lora_available"):
         pytest.skip("Lora is not available with this configuration")
 
     from huggingface_hub import snapshot_download
 
-    path = snapshot_download(repo_id="yard1/llama-2-7b-sql-lora-test")
-    return path
+    return snapshot_download(repo_id="yard1/llama-2-7b-sql-lora-test")
 
 
 @pytest.fixture(scope="session")
@@ -80,6 +97,11 @@ def args(
         path = request.getfixturevalue("lora_adapter_path")
 
         extra_args.extend(("--enable-lora", f"--lora-modules={name}={path}"))
+    if prompt_available:
+        extra_args.extend(["--enable-prompt-adapter"])
+        extra_args.extend(["--max_prompt_adapter_token=8"])
+        extra_args.extend(["--model=bigscience/bloomz-560m"])
+        os.environ["ADAPTER_CACHE"] = str(FIXTURES_DIR)
 
     monkeysession.setattr(
         sys,
