@@ -471,6 +471,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             output,
             max_is_token_limit=max_is_token_limit,
             time_limit_reached=time_limit_reached,
+            tokenizer=tokenizer,
         )
         response = GenerationResponse(
             text=output.text[text_start_offset:],
@@ -647,6 +648,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         *,
         max_is_token_limit: bool,
         time_limit_reached: bool,
+        tokenizer: PreTrainedTokenizer,
     ) -> tuple[StopReason, str | None]:
         finish_reason = output.finish_reason
         stop_sequence = None
@@ -660,17 +662,17 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
         elif finish_reason == "stop":
             stop_reason = StopReason.STOP_SEQUENCE
-            # TODO depends on https://github.com/vllm-project/vllm/pull/2976
-            if hasattr(output, "stop_reason"):
-                stop_str_or_tok = output.stop_reason
-                if stop_str_or_tok is None:
-                    stop_reason = StopReason.EOS_TOKEN
-                elif isinstance(stop_str_or_tok, str):
-                    stop_sequence = stop_str_or_tok
-                else:
-                    logger.warning(
-                        "Unexpected stop_reason type: %s", type(stop_str_or_tok)
-                    )
+            stop_str_or_tok = output.stop_reason
+            if stop_str_or_tok is None:
+                stop_reason = StopReason.EOS_TOKEN
+                stop_sequence = getattr(tokenizer, "eos_token", None)
+            elif isinstance(stop_str_or_tok, int):
+                stop_reason = StopReason.EOS_TOKEN
+                stop_sequence = tokenizer.convert_ids_to_tokens(stop_str_or_tok)
+            elif isinstance(stop_str_or_tok, str):
+                stop_sequence = stop_str_or_tok
+            else:
+                logger.warning("Unexpected stop_reason type: %s", type(stop_str_or_tok))
         elif finish_reason == "abort":
             stop_reason = StopReason.CANCELLED
         else:
@@ -679,8 +681,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         return stop_reason, stop_sequence
 
+    @staticmethod
     def _convert_tokens(  # noqa: PLR0913
-        self,
         token_ids: list[int],
         logprobs_list: list[dict[int, Logprob] | None] | None,
         *,
