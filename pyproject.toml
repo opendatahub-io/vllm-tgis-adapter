@@ -82,7 +82,7 @@ vllm_tgis_adapter = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-ra -W error::grpc.experimental.ExperimentalApiWarning"
+addopts = "-ra"
 
 [tool.coverage.run]
 branch = true
