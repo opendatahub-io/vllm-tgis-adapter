@@ -156,6 +156,6 @@ def _reject_bad_adapter_id(adapter_id: str) -> None:
     if not VALID_ADAPTER_ID_PATTERN.fullmatch(adapter_id):
         TGISValidationError.InvalidAdapterID.error(adapter_id)
 
-    cwd = Path().resolve()
+    cwd = Path().cwd()
     if not Path(adapter_id).resolve().is_relative_to(cwd):
         TGISValidationError.InvalidAdapterID.error(adapter_id)
