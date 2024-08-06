@@ -57,13 +57,25 @@ def lora_adapter_path(request: pytest.FixtureRequest) -> str:
     return path
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(True, id="disable-frontend-multiprocessing=True"),
+        pytest.param(False, id="disable-frontend-multiprocessing=False"),
+    ]
+)
+def disable_frontend_multiprocessing(request):
+    """Enable or disable the frontend-multiprocessing feature."""
+    return request.param
+
+
 @pytest.fixture()
-def args(
+def args(  # noqa: PLR0913
     request: pytest.FixtureRequest,
     monkeypatch,
     grpc_server_port: ArgFixture[int],
     http_server_port: ArgFixture[int],
     lora_available: ArgFixture[bool],
+    disable_frontend_multiprocessing,
 ) -> argparse.Namespace:
     """Return parsed CLI arguments for the adapter/vLLM."""
     # avoid parsing pytest arguments as vllm/vllm_tgis_adapter arguments
@@ -74,6 +86,9 @@ def args(
         path = request.getfixturevalue("lora_adapter_path")
 
         extra_args.extend(("--enable-lora", f"--lora-modules={name}={path}"))
+
+    if disable_frontend_multiprocessing:
+        extra_args.append("--disable-frontend-multiprocessing")
 
     monkeypatch.setattr(
         sys,
@@ -179,3 +194,13 @@ def _servers(
             task.cancel()
 
         t.join()
+
+    # rorkaround: Instantiating the TGISStatLogger multiple times creates
+    # multiple Gauges etc which can only be instantiated once.
+    # By unregistering the Collectors from the REGISTRY we can
+    # work around this problem.
+
+    from prometheus_client.registry import REGISTRY
+
+    for name in list(REGISTRY._collector_to_names.keys()):  # noqa: SLF001
+        REGISTRY.unregister(name)
