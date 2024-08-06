@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from concurrent.futures import FIRST_EXCEPTION
 from typing import TYPE_CHECKING
 
 import uvloop
@@ -53,11 +54,23 @@ async def start_servers(args: argparse.Namespace) -> None:
 
         tasks.append(loop.create_task(override_signal_handler()))
 
-        try:
-            await asyncio.wait(tasks)
-        except asyncio.CancelledError:
-            for task in tasks:
-                task.cancel()
+        done, pending = await asyncio.wait(
+            tasks,
+            return_when=FIRST_EXCEPTION,
+        )
+        for task in pending:
+            task.cancel()
+
+        while done:
+            task = done.pop()
+            exc = task.exception()
+            if not exc:
+                continue
+
+            name = task.get_name()
+            coro_name = task.get_coro().__name__
+
+            raise RuntimeError(f"task={name} ({coro_name})") from exc
 
 
 if __name__ == "__main__":
