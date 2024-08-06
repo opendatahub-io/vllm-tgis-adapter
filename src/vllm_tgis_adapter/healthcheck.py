@@ -9,8 +9,6 @@ import grpc.experimental  # this is required for grpc_health
 from grpc_health.v1.health_pb2 import HealthCheckRequest
 from grpc_health.v1.health_pb2_grpc import Health
 
-from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
-
 warnings.simplefilter(
     action="ignore", category=grpc.experimental.ExperimentalApiWarning
 )
@@ -85,7 +83,10 @@ def parse_args() -> argparse.Namespace:
         type=str,
         help="Name of the service to check",
         required=False,
-        default=TextGenerationService.SERVICE_NAME,
+        # the value below should match:
+        #    vllm_tgis_adapter.grpc.grpc_server.TextGenerationService.SERVICE_NAME
+        # which we do not import here to avoid import overhead
+        default="fmaas.GenerationService",
     )
 
     return parser.parse_args()
