@@ -42,6 +42,7 @@ from vllm_tgis_adapter.tgis_utils.metrics import (
     TGISStatLogger,
 )
 
+from .adapters import AdapterStore, validate_adapters
 from .pb import generation_pb2_grpc
 from .pb.generation_pb2 import DESCRIPTOR as _GENERATION_DESCRIPTOR
 from .pb.generation_pb2 import (
@@ -56,14 +57,6 @@ from .pb.generation_pb2 import (
 )
 from .validation import validate_input, validate_params
 
-try:
-    from .adapters import AdapterStore, validate_adapters
-except ImportError:
-    adapters_available = False
-else:
-    adapters_available = True
-
-
 if TYPE_CHECKING:
     import argparse
     from collections.abc import AsyncIterator, MutableSequence
@@ -76,6 +69,7 @@ if TYPE_CHECKING:
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
 
+    from .adapters import PromptAdapterRequest
     from .pb.generation_pb2 import (
         BatchedGenerationRequest,
         BatchedTokenizeRequest,
@@ -224,11 +218,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
-        adapter_kwargs = (
-            await self._validate_adapters(request, context)
-            if adapters_available
-            else {}
-        )
+        adapter_kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
@@ -326,11 +316,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request()
         request_id = self.request_id(context)
-        adapter_kwargs = (
-            await self._validate_adapters(request, context)
-            if adapters_available
-            else {}
-        )
+        adapter_kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
