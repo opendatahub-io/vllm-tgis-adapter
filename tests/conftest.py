@@ -66,7 +66,7 @@ def lora_adapter_path(request: pytest.FixtureRequest) -> str:
 @pytest.fixture(
     scope="session",
     params=[
-        # pytest.param(True, id="disable-frontend-multiprocessing=True"),
+        pytest.param(True, id="disable-frontend-multiprocessing=True"),
         pytest.param(False, id="disable-frontend-multiprocessing=False"),
     ],
 )
