@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
 from concurrent.futures import FIRST_EXCEPTION
 from typing import TYPE_CHECKING
@@ -17,6 +18,7 @@ from .grpc import run_grpc_server
 from .http import run_http_server
 from .logging import init_logger
 from .tgis_utils.args import EnvVarArgumentParser, add_tgis_args, postprocess_tgis_args
+from .utils import check_for_failed_tasks
 
 if TYPE_CHECKING:
     import argparse
@@ -54,23 +56,16 @@ async def start_servers(args: argparse.Namespace) -> None:
 
         tasks.append(loop.create_task(override_signal_handler()))
 
-        done, pending = await asyncio.wait(
-            tasks,
-            return_when=FIRST_EXCEPTION,
-        )
-        for task in pending:
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.wait(
+                tasks,
+                return_when=FIRST_EXCEPTION,
+            )
+
+        for task in tasks:
             task.cancel()
 
-        while done:
-            task = done.pop()
-            exc = task.exception()
-            if not exc:
-                continue
-
-            name = task.get_name()
-            coro_name = task.get_coro().__name__
-
-            raise RuntimeError(f"task={name} ({coro_name})") from exc
+        check_for_failed_tasks(tasks)
 
 
 if __name__ == "__main__":
