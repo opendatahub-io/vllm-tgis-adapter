@@ -155,7 +155,7 @@ class GrpcClient:
         text: str,
         model_id: str | None = None,
         max_new_tokens: int = 10,
-    ) -> Generator[GenerationResponse, None, None]:
+    ) -> Generator[GenerationResponse]:
         # assert model_id  # FIXME: is model_id required?
 
         request = SingleGenerationRequest(
