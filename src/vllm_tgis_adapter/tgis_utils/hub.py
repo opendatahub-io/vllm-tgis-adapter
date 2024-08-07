@@ -125,13 +125,13 @@ def get_model_path(model_name: str, revision: str | None = None) -> str:
     raise ValueError(f"Weights not found in local cache for model {model_name}")
 
 
-def local_weight_files(model_path: str, extension: str = ".safetensors") -> list:
+def local_weight_files(model_path: str, extension: str = ".safetensors") -> list[Path]:
     """Get the local safetensors filenames."""
     ext = "" if extension is None else extension
     return list(Path(f"{model_path}").glob(f"*{ext}"))
 
 
-def local_index_files(model_path: str, extension: str = ".safetensors") -> list:
+def local_index_files(model_path: str, extension: str = ".safetensors") -> list[Path]:
     """Get the local .index.json filename."""
     ext = "" if extension is None else extension
     return list(Path(f"{model_path}").glob(f"*{ext}.index.json"))
@@ -158,8 +158,7 @@ def convert_file(pt_file: Path, sf_file: Path, discard_names: list[str]) -> None
     # Force tensors to be contiguous
     loaded = {k: v.contiguous() for k, v in loaded.items()}
 
-    dirname = Path(sf_file).parent
-    Path(dirname).mkdir(parents=True, exist_ok=True)
+    sf_file.parent.mkdir(parents=True, exist_ok=True)
     save_file(loaded, sf_file, metadata=metadata)
     reloaded = load_file(sf_file)
     for k in loaded:
@@ -183,7 +182,7 @@ def convert_index_file(
     }
 
     with open(dest_file, "w") as f:
-        json.dump(index, f, indent=4)
+        json.dump(index, f)
 
 
 def convert_files(
