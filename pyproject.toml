@@ -47,6 +47,7 @@ Source = "https://github.com/opendatahub-io/vllm-tgis-adapter"
 [project.scripts]
 grpc-healthcheck = "vllm_tgis_adapter.healthcheck:cli"
 model-util = "vllm_tgis_adapter.tgis_utils.scripts:cli"
+text-generation-server = "vllm_tgis_adapter.tgis_utils.scripts:cli"
 
 [project.optional-dependencies]
 tests = [
