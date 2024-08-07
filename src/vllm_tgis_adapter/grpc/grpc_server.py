@@ -17,8 +17,8 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
-from vllm import AsyncLLMEngine, SamplingParams
-from vllm.engine.async_llm_engine import _AsyncLLMEngine
+from vllm import SamplingParams
+from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import LLMInputs
 from vllm.tracing import (
@@ -42,6 +42,7 @@ from vllm_tgis_adapter.tgis_utils.metrics import (
     TGISStatLogger,
 )
 
+from .adapters import AdapterStore, validate_adapters
 from .pb import generation_pb2_grpc
 from .pb.generation_pb2 import DESCRIPTOR as _GENERATION_DESCRIPTOR
 from .pb.generation_pb2 import (
@@ -56,14 +57,6 @@ from .pb.generation_pb2 import (
 )
 from .validation import validate_input, validate_params
 
-try:
-    from .adapters import AdapterStore, validate_adapters
-except ImportError:
-    adapters_available = False
-else:
-    adapters_available = True
-
-
 if TYPE_CHECKING:
     import argparse
     from collections.abc import AsyncIterator, MutableSequence
@@ -72,9 +65,11 @@ if TYPE_CHECKING:
     from transformers import PreTrainedTokenizer
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
+    from vllm.engine.protocol import AsyncEngineClient
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
 
+    from .adapters import PromptAdapterRequest
     from .pb.generation_pb2 import (
         BatchedGenerationRequest,
         BatchedTokenizeRequest,
@@ -84,18 +79,13 @@ if TYPE_CHECKING:
         SingleGenerationRequest,
     )
 
-    try:
-        from .adapters import PromptAdapterRequest
-    except ImportError:
-        pass
-
 _T = TypeVar("_T")
 _F = TypeVar("_F", Callable, Coroutine)
 
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
 
-ADD_SPECIAL_TOKENS = os.getenv("ADD_SPECIAL_TOKENS")
+ADD_SPECIAL_TOKENS: str | None = os.getenv("ADD_SPECIAL_TOKENS")
 if ADD_SPECIAL_TOKENS is not None:
     ADD_SPECIAL_TOKENS = ADD_SPECIAL_TOKENS.lower() not in (0, "false")
 
@@ -173,11 +163,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     def __init__(
         self,
-        engine: AsyncLLMEngine,
+        engine: AsyncEngineClient | AsyncLLMEngine,
         args: argparse.Namespace,
         health_servicer: health.HealthServicer,
     ):
-        self.engine: AsyncLLMEngine = engine
+        self.engine: AsyncEngineClient = engine
 
         # This is set in post_init()
         self.config: ModelConfig | None = None
@@ -201,12 +191,18 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     async def post_init(self) -> None:
         self.config = await self.engine.get_model_config()
 
-        # Swap in the special TGIS stats logger
-        tgis_stats_logger = TGISStatLogger(
-            vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
-            max_sequence_len=self.config.max_model_len,
-        )
-        self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
+        if not isinstance(self.engine, AsyncLLMEngine):
+            logger.warning(
+                "TGIS Metrics currently disabled in decoupled front-end mode, "
+                "set DISABLE_FRONTEND_MULTIPROCESSING=True to enable"
+            )
+        else:
+            # Swap in the special TGIS stats logger
+            tgis_stats_logger = TGISStatLogger(
+                vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
+                max_sequence_len=self.config.max_model_len,
+            )
+            self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
 
         self.health_servicer.set(
             self.SERVICE_NAME,
@@ -222,11 +218,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
-        adapter_kwargs = (
-            await self._validate_adapters(request, context)
-            if adapters_available
-            else {}
-        )
+        adapter_kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
@@ -265,9 +257,18 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
 
         # TODO handle cancellation
-        result_generator: AsyncIterator[tuple[int, RequestOutput]] = (
-            merge_async_iterators(*generators)
-        )
+        result_generator: AsyncIterator[tuple[int, RequestOutput]]
+
+        kwargs = {}
+        if "is_cancelled" in inspect.signature(merge_async_iterators).parameters:
+            # vllm > 0.5.4
+
+            async def is_cancelled() -> bool:
+                return context.cancelled()
+
+            kwargs["is_cancelled"] = is_cancelled
+
+        result_generator = merge_async_iterators(*generators, **kwargs)
 
         resp_options = request.params.response
         responses: list = [None] * request_count
@@ -324,11 +325,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request()
         request_id = self.request_id(context)
-        adapter_kwargs = (
-            await self._validate_adapters(request, context)
-            if adapters_available
-            else {}
-        )
+        adapter_kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
@@ -876,19 +873,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
 
 async def start_grpc_server(
-    engine: AsyncLLMEngine, args: argparse.Namespace
+    args: argparse.Namespace,
+    engine: AsyncLLMEngine | AsyncEngineClient,
 ) -> aio.Server:
-    # Log memory summary after model is loaded
-    from torch.cuda import memory_summary
-
-    assert isinstance(engine, AsyncLLMEngine)
-    assert isinstance(engine.engine, _AsyncLLMEngine)
-
-    if (device_type := engine.engine.device_config.device.type) == "cuda":
-        logger.info(memory_summary(engine.engine.device_config.device))
-    else:
-        logger.warning("Cannot print device usage for device type: %s", device_type)
-
     server = aio.server()
 
     health_servicer = health.HealthServicer()
@@ -951,20 +938,17 @@ async def start_grpc_server(
 
 
 async def run_grpc_server(
-    engine: AsyncLLMEngine,
     args: argparse.Namespace,
-    *,
-    disable_log_stats: bool,
+    engine: AsyncEngineClient | AsyncLLMEngine,
 ) -> None:
-    assert args is not None
-
-    server = await start_grpc_server(engine, args)
+    server = await start_grpc_server(
+        args,
+        engine,
+    )
 
     try:
         while True:
             await asyncio.sleep(10)
-            if not disable_log_stats:
-                await engine.do_log_stats()
     except asyncio.CancelledError:
         print("Gracefully stopping gRPC server")  # noqa: T201
         await server.stop(30)  # TODO configurable grace

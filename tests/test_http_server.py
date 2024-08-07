@@ -1,12 +1,12 @@
 import requests
 
 
-def test_startup(http_server_url, _http_server):
+def test_startup(http_server_url, _servers):
     """Test that the http_server fixture starts up properly."""
     requests.get(f"{http_server_url}/health").raise_for_status()
 
 
-def test_completions(http_server_url, _http_server):
+def test_completions(http_server_url, _servers):
     response = requests.get(f"{http_server_url}/v1/models")
     response.raise_for_status()
 
@@ -29,6 +29,6 @@ def test_completions(http_server_url, _http_server):
     assert generated_text
 
 
-def test_metrics(http_server_url, _http_server):
+def test_metrics(http_server_url, _servers):
     response = requests.get(f"{http_server_url}/metrics")
     response.raise_for_status()
