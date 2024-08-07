@@ -42,6 +42,6 @@ class ExpDecayLengthPenaltyWarper:
             # To support negative logits we compute the penalty of the
             # absolute value and add to the original logit
             logits[self.eos_token_id] = eos_logit + torch.abs(eos_logit) * (
-                pow(self.penalty, tokens_past) - 1
+                p_factor - 1
             )
         return logits
