@@ -64,7 +64,7 @@ dev = [
 flash_attn = [
   # it's easier to install flash-attn from wheel rather than like this as extra
   # "https://github.com/Dao-AILab/flash-attention/releases/download/v2.5.6/flash_attn-2.5.6+cu118torch2.0cxx11abiFALSE-cp311-cp311-linux_x86_64.whl",
-  "flash-attn==2.6.1",
+  "flash-attn==2.6.3",
   "packaging",  # FIXME: temporary, until https://github.com/Dao-AILab/flash-attention/pull/937 is released
   "ninja"
 ]
