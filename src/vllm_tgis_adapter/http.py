@@ -51,7 +51,7 @@ async def run_http_server(
     **uvicorn_kwargs,  # noqa: ANN003
 ) -> None:
     # modified copy of vllm.entrypoints.openai.api_server.run_server that
-    # allows passing of the engine
+    # doesn't register signal handlers
 
     app = await init_app(engine, args)  # type: ignore[arg-type]
 
