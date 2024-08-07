@@ -101,26 +101,18 @@ def download_weights(
 def get_model_path(model_name: str, revision: str | None = None) -> str:
     """Get path to model dir in local huggingface hub (model) cache."""
     config_file = "config.json"
-    err = None
-    try:
-        config_path = try_to_load_from_cache(
-            model_name,
-            config_file,
-            cache_dir=os.getenv(
-                "TRANSFORMERS_CACHE"
-            ),  # will fall back to HUGGINGFACE_HUB_CACHE
-            revision=revision,
-        )
-        if config_path is not None:
-            return config_path.removesuffix(f"/{config_file}")
-    except ValueError as e:
-        err = e
-
+    config_path = try_to_load_from_cache(
+        model_name,
+        config_file,
+        cache_dir=os.getenv(
+            "TRANSFORMERS_CACHE"
+        ),  # will fall back to HUGGINGFACE_HUB_CACHE
+        revision=revision,
+    )
+    if config_path is not None:
+        return config_path.removesuffix(f"/{config_file}")
     if Path(f"{model_name}/{config_file}").is_file():
         return model_name  # Just treat the model name as an explicit model path
-
-    if err is not None:
-        raise err
 
     raise ValueError(f"Weights not found in local cache for model {model_name}")
 

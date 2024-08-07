@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vllm.scripts import registrer_signal_handlers
 from vllm.utils import FlexibleArgumentParser
 
 from vllm_tgis_adapter.logging import init_logger
@@ -16,8 +15,6 @@ if TYPE_CHECKING:
 
 
 def tgis_cli(args: argparse.Namespace) -> None:
-    registrer_signal_handlers()
-
     if args.command == "download-weights":
         download_weights(
             args.model_name,
