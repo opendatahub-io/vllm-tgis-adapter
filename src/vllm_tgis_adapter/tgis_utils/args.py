@@ -17,13 +17,16 @@ def _to_env_var(arg_name: str) -> str:
 
 def _switch_action_default(action: argparse.Action) -> None:
     """Switch to using env var fallback for all args."""
-    val = os.environ.get(_to_env_var(action.dest))
-    if val:
-        if action.type == bool:
-            val = val.lower() == "true" or val == "1"
-        elif action.type == int:
-            val = int(val)
-        action.default = val
+    env_val = os.environ.get(_to_env_var(action.dest))
+    if not env_val:
+        return
+
+    val: bool | str | int
+    if action.type is bool:
+        val = env_val.lower() == "true" or env_val == "1"
+    elif action.type is int:
+        val = int(env_val)
+    action.default = val
 
 
 class EnvVarArgumentParser(FlexibleArgumentParser):
@@ -51,7 +54,7 @@ class EnvVarArgumentParser(FlexibleArgumentParser):
         if parser:
             parents.append(parser)
             for action in parser._actions:  # noqa: SLF001
-                if type(action) == argparse._HelpAction:  # noqa: SLF001
+                if isinstance(action, argparse._HelpAction):  # noqa: SLF001
                     continue
                 _switch_action_default(action)
         super().__init__(
