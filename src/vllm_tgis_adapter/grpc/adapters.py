@@ -76,7 +76,7 @@ async def validate_adapters(
     # grab the type out of the adapter_config.json file
     if (adapter_metadata := adapter_store.adapters.get(adapter_id)) is None:
         _reject_bad_adapter_id(adapter_id)
-        local_adapter_path = Path(adapter_store.cache_path) / adapter_id
+        local_adapter_path = str(Path(adapter_store.cache_path) / adapter_id)
 
         loop = asyncio.get_running_loop()
         if global_thread_pool is None:
@@ -104,7 +104,7 @@ async def validate_adapters(
         lora_request = LoRARequest(
             lora_name=adapter_id,
             lora_int_id=adapter_metadata.unique_id,
-            lora_local_path=adapter_metadata.full_path,
+            lora_path=adapter_metadata.full_path,
         )
         return {"lora_request": lora_request}
     if adapter_metadata.adapter_type == "PROMPT_TUNING":
@@ -156,6 +156,6 @@ def _reject_bad_adapter_id(adapter_id: str) -> None:
     if not VALID_ADAPTER_ID_PATTERN.fullmatch(adapter_id):
         TGISValidationError.InvalidAdapterID.error(adapter_id)
 
-    cwd = Path().resolve()
+    cwd = Path().cwd()
     if not Path(adapter_id).resolve().is_relative_to(cwd):
         TGISValidationError.InvalidAdapterID.error(adapter_id)

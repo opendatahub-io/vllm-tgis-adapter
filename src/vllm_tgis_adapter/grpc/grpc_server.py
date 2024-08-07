@@ -18,8 +18,8 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
-from vllm import AsyncLLMEngine, SamplingParams
-from vllm.engine.async_llm_engine import _AsyncLLMEngine
+from vllm import SamplingParams
+from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import LLMInputs
 from vllm.tracing import (
@@ -43,6 +43,7 @@ from vllm_tgis_adapter.tgis_utils.metrics import (
     TGISStatLogger,
 )
 
+from .adapters import AdapterStore, validate_adapters
 from .pb import generation_pb2_grpc
 from .pb.generation_pb2 import DESCRIPTOR as _GENERATION_DESCRIPTOR
 from .pb.generation_pb2 import (
@@ -57,14 +58,6 @@ from .pb.generation_pb2 import (
 )
 from .validation import validate_input, validate_params
 
-try:
-    from .adapters import AdapterStore, validate_adapters
-except ImportError:
-    adapters_available = False
-else:
-    adapters_available = True
-
-
 if TYPE_CHECKING:
     import argparse
     from collections.abc import AsyncIterator, MutableSequence
@@ -73,9 +66,11 @@ if TYPE_CHECKING:
     from transformers import PreTrainedTokenizer
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
+    from vllm.engine.protocol import AsyncEngineClient
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
 
+    from .adapters import PromptAdapterRequest
     from .pb.generation_pb2 import (
         BatchedGenerationRequest,
         BatchedTokenizeRequest,
@@ -85,20 +80,16 @@ if TYPE_CHECKING:
         SingleGenerationRequest,
     )
 
-    try:
-        from .adapters import PromptAdapterRequest
-    except ImportError:
-        pass
-
 _T = TypeVar("_T")
 _F = TypeVar("_F", Callable, Coroutine)
 
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
 
-ADD_SPECIAL_TOKENS = os.getenv("ADD_SPECIAL_TOKENS")
-if ADD_SPECIAL_TOKENS is not None:
-    ADD_SPECIAL_TOKENS = ADD_SPECIAL_TOKENS.lower() not in (0, "false")
+ADD_SPECIAL_TOKENS: bool = os.getenv("ADD_SPECIAL_TOKENS", "true").lower() not in (
+    "0",
+    "false",
+)
 
 
 def with_default(value: _T, default: _T) -> _T:
@@ -186,11 +177,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     def __init__(
         self,
-        engine: AsyncLLMEngine,
+        engine: AsyncEngineClient | AsyncLLMEngine,
         args: argparse.Namespace,
         health_servicer: health.HealthServicer,
     ):
-        self.engine: AsyncLLMEngine = engine
+        self.engine: AsyncEngineClient = engine
 
         # This is set in post_init()
         self.config: ModelConfig | None = None
@@ -214,12 +205,18 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     async def post_init(self) -> None:
         self.config = await self.engine.get_model_config()
 
-        # Swap in the special TGIS stats logger
-        tgis_stats_logger = TGISStatLogger(
-            vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
-            max_sequence_len=self.config.max_model_len,
-        )
-        self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
+        if not isinstance(self.engine, AsyncLLMEngine):
+            logger.warning(
+                "TGIS Metrics currently disabled in decoupled front-end mode, "
+                "set DISABLE_FRONTEND_MULTIPROCESSING=True to enable"
+            )
+        else:
+            # Swap in the special TGIS stats logger
+            tgis_stats_logger = TGISStatLogger(
+                vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
+                max_sequence_len=self.config.max_model_len,
+            )
+            self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
 
         self.health_servicer.set(
             self.SERVICE_NAME,
@@ -235,11 +232,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
-        adapter_kwargs = (
-            await self._validate_adapters(request, context)
-            if adapters_available
-            else {}
-        )
+        adapter_kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
@@ -278,9 +271,18 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
 
         # TODO handle cancellation
-        result_generator: AsyncIterator[tuple[int, RequestOutput]] = (
-            merge_async_iterators(*generators)
-        )
+        result_generator: AsyncIterator[tuple[int, RequestOutput]]
+
+        kwargs = {}
+        if "is_cancelled" in inspect.signature(merge_async_iterators).parameters:
+            # vllm > 0.5.4
+
+            async def is_cancelled() -> bool:
+                return context.cancelled()
+
+            kwargs["is_cancelled"] = is_cancelled
+
+        result_generator = merge_async_iterators(*generators, **kwargs)
 
         resp_options = request.params.response
         responses: list = [None] * request_count
@@ -337,11 +339,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request()
         request_id = self.request_id(context)
-        adapter_kwargs = (
-            await self._validate_adapters(request, context)
-            if adapters_available
-            else {}
-        )
+        adapter_kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
@@ -361,7 +359,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             prompt=request.request.text,
             prompt_token_ids=input_ids,
         )
-
+        kwargs = {}
+        is_tracing_enabled = await self.engine.is_tracing_enabled()
+        headers = dict(context.invocation_metadata())
+        if is_tracing_enabled:
+            kwargs["trace_headers"] = extract_trace_headers(headers)
+        elif contains_trace_headers(headers):
+            log_tracing_disabled_warning()
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
             # re-tokenized when `prompt_token_ids` is supplied
@@ -369,6 +373,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             sampling_params=sampling_params,
             request_id=request_id,
             **adapter_kwargs,
+            **kwargs,
         )
 
         resp_options = request.params.response
@@ -443,7 +448,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         )
         service_metrics.observe_generation_success(start_time=start_time)
 
-    def _convert_input_details(  # noqa: PLR0913
+    def _convert_input_details(
         self,
         result: RequestOutput,
         resp_options: ResponseOptions,
@@ -487,6 +492,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             output,
             max_is_token_limit=max_is_token_limit,
             time_limit_reached=time_limit_reached,
+            tokenizer=tokenizer,
         )
         response = GenerationResponse(
             text=output.text[text_start_offset:],
@@ -663,6 +669,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         *,
         max_is_token_limit: bool,
         time_limit_reached: bool,
+        tokenizer: PreTrainedTokenizer,
     ) -> tuple[StopReason, str | None]:
         finish_reason = output.finish_reason
         stop_sequence = None
@@ -676,17 +683,17 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
         elif finish_reason == "stop":
             stop_reason = StopReason.STOP_SEQUENCE
-            # TODO depends on https://github.com/vllm-project/vllm/pull/2976
-            if hasattr(output, "stop_reason"):
-                stop_str_or_tok = output.stop_reason
-                if stop_str_or_tok is None:
-                    stop_reason = StopReason.EOS_TOKEN
-                elif isinstance(stop_str_or_tok, str):
-                    stop_sequence = stop_str_or_tok
-                else:
-                    logger.warning(
-                        "Unexpected stop_reason type: %s", type(stop_str_or_tok)
-                    )
+            stop_str_or_tok = output.stop_reason
+            if stop_str_or_tok is None:
+                stop_reason = StopReason.EOS_TOKEN
+                stop_sequence = getattr(tokenizer, "eos_token", None)
+            elif isinstance(stop_str_or_tok, int):
+                stop_reason = StopReason.EOS_TOKEN
+                stop_sequence = tokenizer.convert_ids_to_tokens(stop_str_or_tok)
+            elif isinstance(stop_str_or_tok, str):
+                stop_sequence = stop_str_or_tok
+            else:
+                logger.warning("Unexpected stop_reason type: %s", type(stop_str_or_tok))
         elif finish_reason == "abort":
             stop_reason = StopReason.CANCELLED
         else:
@@ -695,8 +702,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         return stop_reason, stop_sequence
 
+    @staticmethod
     def _convert_tokens(  # noqa: PLR0913
-        self,
         token_ids: list[int],
         logprobs_list: list[dict[int, Logprob] | None] | None,
         *,
@@ -749,7 +756,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 )
             token_infos.append(token_info)
 
-    async def _validate_prompt_and_tokenize(  # noqa: PLR0913
+    async def _validate_prompt_and_tokenize(
         self,
         sampling_params: SamplingParams,
         truncate_input_tokens: int | None,
@@ -761,15 +768,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         max_model_len = self.config.max_model_len
 
-        # Add special tokens based on env var or else only if the tokenizer
-        # does not have a chat template => this is not a chat model
-        add_special_tokens = (
-            ADD_SPECIAL_TOKENS
-            if ADD_SPECIAL_TOKENS is not None
-            else not tokenizer.chat_template
-        )
-
-        tokenizer_kwargs: dict[str, Any] = {"add_special_tokens": add_special_tokens}
+        tokenizer_kwargs: dict[str, Any] = {"add_special_tokens": ADD_SPECIAL_TOKENS}
         if truncate_input_tokens is not None:
             tokenizer_kwargs.update(
                 {
@@ -889,19 +888,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
 
 async def start_grpc_server(
-    engine: AsyncLLMEngine, args: argparse.Namespace
+    args: argparse.Namespace,
+    engine: AsyncLLMEngine | AsyncEngineClient,
 ) -> aio.Server:
-    # Log memory summary after model is loaded
-    from torch.cuda import memory_summary
-
-    assert isinstance(engine, AsyncLLMEngine)
-    assert isinstance(engine.engine, _AsyncLLMEngine)
-
-    if (device_type := engine.engine.device_config.device.type) == "cuda":
-        logger.info(memory_summary(engine.engine.device_config.device))
-    else:
-        logger.warning("Cannot print device usage for device type: %s", device_type)
-
     server = aio.server()
 
     health_servicer = health.HealthServicer()
@@ -928,12 +917,12 @@ async def start_grpc_server(
     if ssl_keyfile and ssl_certfile:
         require_client_auth = False
         try:
-            with open(ssl_keyfile, "rb") as f:  # noqa: ASYNC101
+            with open(ssl_keyfile, "rb") as f:  # noqa: ASYNC230
                 ssl_key = f.read()
         except Exception as e:
             raise ValueError(f"Error reading `ssl_keyfile` file: {ssl_keyfile}") from e
         try:
-            with open(ssl_certfile, "rb") as f:  # noqa: ASYNC101
+            with open(ssl_certfile, "rb") as f:  # noqa: ASYNC230
                 ssl_cert = f.read()
         except Exception as e:
             raise ValueError(
@@ -942,7 +931,7 @@ async def start_grpc_server(
         if ssl_ca_certs:
             require_client_auth = True
             try:
-                with open(ssl_ca_certs, "rb") as f:  # noqa: ASYNC101
+                with open(ssl_ca_certs, "rb") as f:  # noqa: ASYNC230
                     root_certificates = f.read()
             except Exception as e:
                 raise ValueError(
@@ -964,20 +953,17 @@ async def start_grpc_server(
 
 
 async def run_grpc_server(
-    engine: AsyncLLMEngine,
     args: argparse.Namespace,
-    *,
-    disable_log_stats: bool,
+    engine: AsyncEngineClient | AsyncLLMEngine,
 ) -> None:
-    assert args is not None
-
-    server = await start_grpc_server(engine, args)
+    server = await start_grpc_server(
+        args,
+        engine,
+    )
 
     try:
         while True:
             await asyncio.sleep(10)
-            if not disable_log_stats:
-                await engine.do_log_stats()
     except asyncio.CancelledError:
         print("Gracefully stopping gRPC server")  # noqa: T201
         await server.stop(30)  # TODO configurable grace
