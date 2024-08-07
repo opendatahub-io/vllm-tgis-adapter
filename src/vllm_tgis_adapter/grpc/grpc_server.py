@@ -427,7 +427,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         )
         service_metrics.observe_generation_success(start_time=start_time)
 
-    def _convert_input_details(  # noqa: PLR0913
+    def _convert_input_details(
         self,
         result: RequestOutput,
         resp_options: ResponseOptions,
@@ -733,7 +733,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 )
             token_infos.append(token_info)
 
-    async def _validate_prompt_and_tokenize(  # noqa: PLR0913
+    async def _validate_prompt_and_tokenize(
         self,
         sampling_params: SamplingParams,
         truncate_input_tokens: int | None,
@@ -902,12 +902,12 @@ async def start_grpc_server(
     if ssl_keyfile and ssl_certfile:
         require_client_auth = False
         try:
-            with open(ssl_keyfile, "rb") as f:  # noqa: ASYNC101
+            with open(ssl_keyfile, "rb") as f:  # noqa: ASYNC230
                 ssl_key = f.read()
         except Exception as e:
             raise ValueError(f"Error reading `ssl_keyfile` file: {ssl_keyfile}") from e
         try:
-            with open(ssl_certfile, "rb") as f:  # noqa: ASYNC101
+            with open(ssl_certfile, "rb") as f:  # noqa: ASYNC230
                 ssl_cert = f.read()
         except Exception as e:
             raise ValueError(
@@ -916,7 +916,7 @@ async def start_grpc_server(
         if ssl_ca_certs:
             require_client_auth = True
             try:
-                with open(ssl_ca_certs, "rb") as f:  # noqa: ASYNC101
+                with open(ssl_ca_certs, "rb") as f:  # noqa: ASYNC230
                     root_certificates = f.read()
             except Exception as e:
                 raise ValueError(
