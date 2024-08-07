@@ -32,7 +32,7 @@ dependencies = [
   "grpcio-health-checking==1.62.2",
   "grpcio-reflection==1.62.2",
   "accelerate==0.32.1",
-  "hf-transfer==0.1.6",
+  "hf-transfer==0.1.8",
   # additional dependencies for OpenTelemetry tracing
   "opentelemetry-sdk",
   "opentelemetry-api",
@@ -50,7 +50,7 @@ model-util = "vllm_tgis_adapter.tgis_utils.scripts:cli"
 
 [project.optional-dependencies]
 tests = [
-  "pytest==8.2.2",
+  "pytest==8.3.2",
   "pytest-cov==5.0.0",
   "pytest-mock==3.14.0",
   "requests==2.32.3"
@@ -65,7 +65,7 @@ dev = [
 flash_attn = [
   # it's easier to install flash-attn from wheel rather than like this as extra
   # "https://github.com/Dao-AILab/flash-attention/releases/download/v2.5.6/flash_attn-2.5.6+cu118torch2.0cxx11abiFALSE-cp311-cp311-linux_x86_64.whl",
-  "flash-attn==2.6.1",
+  "flash-attn==2.6.3",
   "packaging",  # FIXME: temporary, until https://github.com/Dao-AILab/flash-attention/pull/937 is released
   "ninja"
 ]

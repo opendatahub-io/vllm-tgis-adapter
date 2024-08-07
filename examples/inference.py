@@ -21,8 +21,8 @@ def protogen():
 
     try:
         with chdir(working_dir):
-            subprocess.check_output(
-                [  # noqa: S603,S607
+            subprocess.check_output(  # noqa: S603
+                [  # noqa: S607
                     "python",
                     "-m",
                     "grpc_tools.protoc",

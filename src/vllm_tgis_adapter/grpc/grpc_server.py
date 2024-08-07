@@ -85,9 +85,10 @@ _F = TypeVar("_F", Callable, Coroutine)
 logger = init_logger(__name__)
 service_metrics = ServiceMetrics()
 
-ADD_SPECIAL_TOKENS: str | None = os.getenv("ADD_SPECIAL_TOKENS")
-if ADD_SPECIAL_TOKENS is not None:
-    ADD_SPECIAL_TOKENS = ADD_SPECIAL_TOKENS.lower() not in (0, "false")
+ADD_SPECIAL_TOKENS: bool = os.getenv("ADD_SPECIAL_TOKENS", "true").lower() not in (
+    "0",
+    "false",
+)
 
 
 def with_default(value: _T, default: _T) -> _T:
@@ -345,7 +346,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             prompt=request.request.text,
             prompt_token_ids=input_ids,
         )
-
+        kwargs = {}
+        is_tracing_enabled = await self.engine.is_tracing_enabled()
+        headers = dict(context.invocation_metadata())
+        if is_tracing_enabled:
+            kwargs["trace_headers"] = extract_trace_headers(headers)
+        elif contains_trace_headers(headers):
+            log_tracing_disabled_warning()
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
             # re-tokenized when `prompt_token_ids` is supplied
@@ -353,6 +360,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             sampling_params=sampling_params,
             request_id=request_id,
             **adapter_kwargs,
+            **kwargs,
         )
 
         resp_options = request.params.response
@@ -427,7 +435,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         )
         service_metrics.observe_generation_success(start_time=start_time)
 
-    def _convert_input_details(  # noqa: PLR0913
+    def _convert_input_details(
         self,
         result: RequestOutput,
         resp_options: ResponseOptions,
@@ -471,6 +479,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             output,
             max_is_token_limit=max_is_token_limit,
             time_limit_reached=time_limit_reached,
+            tokenizer=tokenizer,
         )
         response = GenerationResponse(
             text=output.text[text_start_offset:],
@@ -647,6 +656,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         *,
         max_is_token_limit: bool,
         time_limit_reached: bool,
+        tokenizer: PreTrainedTokenizer,
     ) -> tuple[StopReason, str | None]:
         finish_reason = output.finish_reason
         stop_sequence = None
@@ -660,17 +670,17 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
         elif finish_reason == "stop":
             stop_reason = StopReason.STOP_SEQUENCE
-            # TODO depends on https://github.com/vllm-project/vllm/pull/2976
-            if hasattr(output, "stop_reason"):
-                stop_str_or_tok = output.stop_reason
-                if stop_str_or_tok is None:
-                    stop_reason = StopReason.EOS_TOKEN
-                elif isinstance(stop_str_or_tok, str):
-                    stop_sequence = stop_str_or_tok
-                else:
-                    logger.warning(
-                        "Unexpected stop_reason type: %s", type(stop_str_or_tok)
-                    )
+            stop_str_or_tok = output.stop_reason
+            if stop_str_or_tok is None:
+                stop_reason = StopReason.EOS_TOKEN
+                stop_sequence = getattr(tokenizer, "eos_token", None)
+            elif isinstance(stop_str_or_tok, int):
+                stop_reason = StopReason.EOS_TOKEN
+                stop_sequence = tokenizer.convert_ids_to_tokens(stop_str_or_tok)
+            elif isinstance(stop_str_or_tok, str):
+                stop_sequence = stop_str_or_tok
+            else:
+                logger.warning("Unexpected stop_reason type: %s", type(stop_str_or_tok))
         elif finish_reason == "abort":
             stop_reason = StopReason.CANCELLED
         else:
@@ -679,8 +689,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         return stop_reason, stop_sequence
 
+    @staticmethod
     def _convert_tokens(  # noqa: PLR0913
-        self,
         token_ids: list[int],
         logprobs_list: list[dict[int, Logprob] | None] | None,
         *,
@@ -733,7 +743,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 )
             token_infos.append(token_info)
 
-    async def _validate_prompt_and_tokenize(  # noqa: PLR0913
+    async def _validate_prompt_and_tokenize(
         self,
         sampling_params: SamplingParams,
         truncate_input_tokens: int | None,
@@ -745,15 +755,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         max_model_len = self.config.max_model_len
 
-        # Add special tokens based on env var or else only if the tokenizer
-        # does not have a chat template => this is not a chat model
-        add_special_tokens = (
-            ADD_SPECIAL_TOKENS
-            if ADD_SPECIAL_TOKENS is not None
-            else not tokenizer.chat_template
-        )
-
-        tokenizer_kwargs: dict[str, Any] = {"add_special_tokens": add_special_tokens}
+        tokenizer_kwargs: dict[str, Any] = {"add_special_tokens": ADD_SPECIAL_TOKENS}
         if truncate_input_tokens is not None:
             tokenizer_kwargs.update(
                 {
@@ -902,12 +904,12 @@ async def start_grpc_server(
     if ssl_keyfile and ssl_certfile:
         require_client_auth = False
         try:
-            with open(ssl_keyfile, "rb") as f:  # noqa: ASYNC101
+            with open(ssl_keyfile, "rb") as f:  # noqa: ASYNC230
                 ssl_key = f.read()
         except Exception as e:
             raise ValueError(f"Error reading `ssl_keyfile` file: {ssl_keyfile}") from e
         try:
-            with open(ssl_certfile, "rb") as f:  # noqa: ASYNC101
+            with open(ssl_certfile, "rb") as f:  # noqa: ASYNC230
                 ssl_cert = f.read()
         except Exception as e:
             raise ValueError(
@@ -916,7 +918,7 @@ async def start_grpc_server(
         if ssl_ca_certs:
             require_client_auth = True
             try:
-                with open(ssl_ca_certs, "rb") as f:  # noqa: ASYNC101
+                with open(ssl_ca_certs, "rb") as f:  # noqa: ASYNC230
                     root_certificates = f.read()
             except Exception as e:
                 raise ValueError(
