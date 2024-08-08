@@ -86,7 +86,7 @@ def download_weights(
     )
 
     logger.info("Downloading %s files for model %s", len(filenames), model_name)
-    executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+    executor = ThreadPoolExecutor(max_workers=min(16, os.cpu_count()))
     futures = [
         executor.submit(download_function, filename=filename) for filename in filenames
     ]
