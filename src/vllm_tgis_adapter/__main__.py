@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import signal
-from concurrent.futures import FIRST_EXCEPTION
+from concurrent.futures import FIRST_COMPLETED
 from typing import TYPE_CHECKING
 
 import uvloop
@@ -54,14 +54,15 @@ async def start_servers(args: argparse.Namespace) -> None:
             for sig in (signal.SIGINT, signal.SIGTERM):
                 loop.add_signal_handler(sig, signal_handler)
 
-        tasks.append(loop.create_task(override_signal_handler()))
+        await override_signal_handler()
 
         with contextlib.suppress(asyncio.CancelledError):
+            # Both server tasks will exit normally on shutdown, so we await
+            # FIRST_COMPLETED to catch either one shutting down.
             await asyncio.wait(
                 tasks,
-                return_when=FIRST_EXCEPTION,
+                return_when=FIRST_COMPLETED,
             )
-
         for task in tasks:
             task.cancel()
 
