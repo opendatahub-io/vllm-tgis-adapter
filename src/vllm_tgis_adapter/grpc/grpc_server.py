@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
-import signal
 import time
 import uuid
 from collections.abc import Callable, Coroutine
@@ -113,9 +112,10 @@ async def _handle_exception(
     if engine.errored and not engine.is_running:
         # awaiting a server.stop() in here won't work because we're in
         # the context of a running request.
-        # SIGTERM is a bit rough, but will signal the process to gracefully
-        # shut down both the grpc and http servers.
-        os.kill(os.getpid(), signal.SIGTERM)
+        # Instead we set an event to signal another coroutine to stop the
+        # server.
+        stop_event = args[0].stop_event
+        stop_event.set()
 
     # First just try to replicate the TGIS-style log messages
     # for generate_* rpcs
@@ -180,8 +180,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         engine: AsyncEngineClient | AsyncLLMEngine,
         args: argparse.Namespace,
         health_servicer: health.HealthServicer,
+        stop_event: asyncio.Event,
     ):
         self.engine: AsyncEngineClient = engine
+        self.stop_event = stop_event
 
         # This is set in post_init()
         self.config: ModelConfig | None = None
@@ -883,13 +885,14 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 async def start_grpc_server(
     args: argparse.Namespace,
     engine: AsyncLLMEngine | AsyncEngineClient,
+    stop_event: asyncio.Event,
 ) -> aio.Server:
     server = aio.server()
 
     health_servicer = health.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 
-    generation = TextGenerationService(engine, args, health_servicer)
+    generation = TextGenerationService(engine, args, health_servicer, stop_event)
     await generation.post_init()
     generation_pb2_grpc.add_GenerationServiceServicer_to_server(generation, server)
 
@@ -949,14 +952,20 @@ async def run_grpc_server(
     args: argparse.Namespace,
     engine: AsyncEngineClient | AsyncLLMEngine,
 ) -> None:
-    server = await start_grpc_server(
-        args,
-        engine,
-    )
+    stop_event = asyncio.Event()
+    server = await start_grpc_server(args, engine, stop_event)
+
+    # Add a task to watch for the stop event, so that the server can kill
+    # itself from within its own handlers
+    async def wait_for_server_shutdown() -> None:
+        await stop_event.wait()
+        # Kill with no grace period because the engine is dead
+        await server.stop(0)
 
     try:
-        while True:
-            await asyncio.sleep(10)
+        # Either the server stops itself,
+        # Or the task running this coroutine gets cancelled
+        await wait_for_server_shutdown()
     except asyncio.CancelledError:
         print("Gracefully stopping gRPC server")  # noqa: T201
         await server.stop(30)  # TODO configurable grace
