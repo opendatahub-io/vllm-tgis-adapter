@@ -270,18 +270,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
 
         # TODO handle cancellation
-        result_generator: AsyncIterator[tuple[int, RequestOutput]]
-
-        kwargs = {}
-        if "is_cancelled" in inspect.signature(merge_async_iterators).parameters:
-            # vllm > 0.5.4
-
-            async def is_cancelled() -> bool:
-                return context.cancelled()
-
-            kwargs["is_cancelled"] = is_cancelled
-
-        result_generator = merge_async_iterators(*generators, **kwargs)
+        result_generator: AsyncIterator[tuple[int, RequestOutput]] = (
+            merge_async_iterators(*generators)
+        )
 
         resp_options = request.params.response
         responses: list = [None] * request_count
