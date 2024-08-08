@@ -190,9 +190,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.skip_special_tokens = not args.output_special_tokens
         self.default_include_stop_seqs = args.default_include_stop_seqs
 
-        # Temporary to validate parameters currently broken with PP
-        self.pipeline_parallel = args.pipeline_parallel_size > 1
-
         # Backwards compatibility for TGIS: PREFIX_STORE_PATH
         adapter_cache_path = args.adapter_cache or args.prefix_store_path
         self.adapter_store = (
@@ -527,11 +524,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         """Return (sampling_params, deadline)."""
         # First run TGIS validation to raise errors that match the TGIS api
         try:
-            validate_params(
-                params,
-                self.max_max_new_tokens,
-                pipeline_parallel=self.pipeline_parallel,
-            )
+            validate_params(params, self.max_max_new_tokens)
         except ValueError as tgis_validation_error:
             service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(tgis_validation_error))

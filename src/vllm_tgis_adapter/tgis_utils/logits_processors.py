@@ -35,12 +35,13 @@ class ExpDecayLengthPenaltyWarper:
         token_ids: list[int],
         logits: torch.Tensor,
     ) -> torch.Tensor:
-        tokens_past = len(token_ids) - self.start
-        if tokens_past > 0:
+        tokens_past = max(0, len(token_ids) - self.start)
+        p_factor = pow(self.penalty, tokens_past)
+        if p_factor != 1:
             eos_logit = logits[self.eos_token_id]
             # To support negative logits we compute the penalty of the
             # absolute value and add to the original logit
             logits[self.eos_token_id] = eos_logit + torch.abs(eos_logit) * (
-                pow(self.penalty, tokens_past) - 1
+                p_factor - 1
             )
         return logits
