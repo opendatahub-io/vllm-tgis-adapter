@@ -164,12 +164,10 @@ def convert_to_fast_tokenizer(
         logger.info("Model %s already has a fast tokenizer", model_name)
         return
 
-    if output_path is not None:
-        if not Path.isdir(output_path):
-            logger.info("Output path %s must exist and be a directory", output_path)
-            return
-    else:
-        output_path = model_path
+    if output_path is not None and not Path.isdir(output_path):
+        logger.info("Output path %s must exist and be a directory", output_path)
+        return
+    output_path = model_path
 
     import transformers
 
