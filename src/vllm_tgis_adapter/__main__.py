@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import signal
-from concurrent.futures import FIRST_EXCEPTION
+from concurrent.futures import FIRST_COMPLETED
 from typing import TYPE_CHECKING
 
 import uvloop
@@ -35,6 +34,7 @@ async def start_servers(args: argparse.Namespace) -> None:
             run_http_server(args, engine),
             name="http_server",
         )
+        # The http server task will catch interrupt signals for us
         tasks.append(http_server_task)
 
         grpc_server_task = loop.create_task(
@@ -43,27 +43,16 @@ async def start_servers(args: argparse.Namespace) -> None:
         )
         tasks.append(grpc_server_task)
 
-        def signal_handler() -> None:
-            # prevents the uvicorn signal handler to exit early
-            for task in tasks:
-                task.cancel()
-
-        async def override_signal_handler() -> None:
-            loop = asyncio.get_running_loop()
-
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(sig, signal_handler)
-
-        tasks.append(loop.create_task(override_signal_handler()))
-
         with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.wait(
-                tasks,
-                return_when=FIRST_EXCEPTION,
-            )
-
+            # Both server tasks will exit normally on shutdown, so we await
+            # FIRST_COMPLETED to catch either one shutting down.
+            await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
+        # Once either server shuts down, cancel the other
         for task in tasks:
             task.cancel()
+
+        # Final wait for both servers to finish
+        await asyncio.wait(tasks)
 
         check_for_failed_tasks(tasks)
 
