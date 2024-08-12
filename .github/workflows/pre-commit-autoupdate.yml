@@ -1,0 +1,62 @@
+name: "pre-commit autoupdate"
+
+on:
+  schedule:
+    - cron: 20 4 * * *
+
+  workflow_dispatch:
+
+jobs:
+  pre-commit-autoupdate:
+    name: pre-commit autoupdate
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update pre-commit
+        id: autoupdate
+        run: |
+          echo "log<<EOF"
+          nox -v --session pre-commit autoupdate | tee -a >(cat >> $GITHUB_OUTPUT)
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      - name: Check diff
+        id: diff
+        shell: bash
+        run: |
+          echo 'diff<<EOF' >> $GITHUB_OUTPUT
+          git diff | tee -a >(cat >> $GITHUB_OUTPUT)
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      - name: Create PR
+        if: ${{ steps.diff.outputs.diff != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -xeu
+
+          title="pre-commit autoupdate"
+          body='```${{steps.autoupdate.output.log}}```'
+
+          pr_number=$(gh pr list -S "pre-commit autoupdate" --json number --jq '.[0].number')
+
+          if [[ -z $pr_number ]]; then
+            echo "Creating PR"
+            gh pr create \
+              --label dependencies \
+              --title "$title" \
+              --body "$body"
+            exit 0
+          fi
+
+          echo "Updating PR \#${pr_number}"
+          gh pr edit \
+            $pr_number \
+            --body "$body" \
+            --title "$title"
