@@ -85,6 +85,9 @@ vllm_tgis_adapter = [
 
 [tool.pytest.ini_options]
 addopts = "-ra"
+markers = [
+  "large"
+]
 
 [tool.coverage.run]
 branch = true

@@ -31,6 +31,7 @@ def test_weight_hub_files():
     assert filenames == ["model.safetensors"]
 
 
+@pytest.mark.large()
 def test_weight_hub_files_llm():
     filenames = weight_hub_files("bigscience/bloom")
     assert filenames == [f"model_{i:05d}-of-00072.safetensors" for i in range(1, 73)]
