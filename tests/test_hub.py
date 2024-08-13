@@ -10,9 +10,11 @@ from vllm_tgis_adapter.tgis_utils.hub import (
     weight_hub_files,
 )
 
+pytestmark = pytest.mark.hf_data
+
 
 def test_convert_files():
-    model_id = "bigscience/bloom-560m"
+    model_id = "facebook/opt-125m"
     local_pt_files = download_weights(model_id, extension=".bin")
     local_pt_files = [Path(p) for p in local_pt_files]
     local_st_files = [
@@ -27,11 +29,10 @@ def test_convert_files():
 
 
 def test_weight_hub_files():
-    filenames = weight_hub_files("bigscience/bloom-560m")
+    filenames = weight_hub_files("facebook/opt-125m")
     assert filenames == ["model.safetensors"]
 
 
-@pytest.mark.large()
 def test_weight_hub_files_llm():
     filenames = weight_hub_files("bigscience/bloom")
     assert filenames == [f"model_{i:05d}-of-00072.safetensors" for i in range(1, 73)]
@@ -43,8 +44,8 @@ def test_weight_hub_files_empty():
 
 
 def test_download_weights():
-    files = download_weights("bigscience/bloom-560m")
-    local_files = weight_files("bigscience/bloom-560m")
+    files = download_weights("facebook/opt-125m")
+    local_files = weight_files("facebook/opt-125m")
     assert files == local_files
 
 

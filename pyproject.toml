@@ -84,9 +84,9 @@ vllm_tgis_adapter = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra -k \"not hf_data\""
 markers = [
-  "large"
+  "hf_data: marks tests that download data from HF hub (deselect with '-m \"not hf_data\"')"
 ]
 
 [tool.coverage.run]
