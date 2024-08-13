@@ -136,6 +136,8 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("--speculator-max-batch-size", type=int)
     # allow re-enabling vllm native per-request logging
     parser.add_argument("--enable-vllm-log-requests", type=bool, default=False)
+    # set to true to disable producing prompt logprobs on all requests
+    parser.add_argument("--disable-prompt-logprobs", type=bool, default=False)
 
     # TODO check/add other args here
 

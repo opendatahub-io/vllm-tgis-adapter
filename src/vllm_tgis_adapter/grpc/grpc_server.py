@@ -191,6 +191,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.max_max_new_tokens = args.max_new_tokens
         self.skip_special_tokens = not args.output_special_tokens
         self.default_include_stop_seqs = args.default_include_stop_seqs
+        self.disable_prompt_logprobs = args.disable_prompt_logprobs
 
         # Backwards compatibility for TGIS: PREFIX_STORE_PATH
         adapter_cache_path = args.adapter_cache or args.prefix_store_path
@@ -606,7 +607,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         try:
             sampling_params = SamplingParams(
                 logprobs=logprobs,
-                prompt_logprobs=logprobs if resp_options.input_tokens else None,
+                prompt_logprobs=logprobs if not self.disable_prompt_logprobs and resp_options.input_tokens \
+                                         else None,
                 max_tokens=max_new_tokens,
                 min_tokens=min_new_tokens,
                 repetition_penalty=with_default(decoding.repetition_penalty, 1.0),
