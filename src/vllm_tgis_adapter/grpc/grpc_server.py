@@ -607,8 +607,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         try:
             sampling_params = SamplingParams(
                 logprobs=logprobs,
-                prompt_logprobs=logprobs if not self.disable_prompt_logprobs and resp_options.input_tokens \
-                                         else None,
+                prompt_logprobs=logprobs
+                if not self.disable_prompt_logprobs and resp_options.input_tokens
+                else None,
                 max_tokens=max_new_tokens,
                 min_tokens=min_new_tokens,
                 repetition_penalty=with_default(decoding.repetition_penalty, 1.0),
