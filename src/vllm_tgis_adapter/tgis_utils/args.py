@@ -26,6 +26,8 @@ def _switch_action_default(action: argparse.Action) -> None:
         val = env_val.lower() == "true" or env_val == "1"
     elif action.type is int:
         val = int(env_val)
+    else:
+        val = env_val
     action.default = val
 
 
