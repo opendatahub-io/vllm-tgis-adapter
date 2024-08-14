@@ -30,7 +30,7 @@ dependencies = [
   "prometheus_client==0.20.0",
   "grpcio==1.62.2",
   "grpcio-health-checking==1.62.2",
-  "grpcio-reflection==1.62.2",
+  "grpcio-reflection==1.65.4",
   "accelerate==0.32.1",
   "hf-transfer==0.1.8",
   # additional dependencies for OpenTelemetry tracing
