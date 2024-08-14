@@ -46,6 +46,8 @@ Source = "https://github.com/opendatahub-io/vllm-tgis-adapter"
 
 [project.scripts]
 grpc_healthcheck = "vllm_tgis_adapter.healthcheck:cli"
+model-util = "vllm_tgis_adapter.tgis_utils.scripts:cli"
+text-generation-server = "vllm_tgis_adapter.tgis_utils.scripts:cli"
 
 [project.optional-dependencies]
 tests = [
@@ -82,7 +84,10 @@ vllm_tgis_adapter = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra -k \"not hf_data\""
+markers = [
+  "hf_data: marks tests that download data from HF hub (deselect with '-m \"not hf_data\"')"
+]
 
 [tool.coverage.run]
 branch = true
