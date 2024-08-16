@@ -243,6 +243,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         generators = []
         max_is_token_limit = [False] * request_count
+        # map for storing prompts for requests
+        request_prompt_map = {}
 
         for i, req in enumerate(request.requests):
             input_ids, max_is_token_limit[i] = await self._validate_prompt_and_tokenize(
@@ -260,11 +262,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 kwargs["trace_headers"] = extract_trace_headers(headers)
             elif contains_trace_headers(headers):
                 log_tracing_disabled_warning()
+            unique_request_id = f"{request_id}-{i}"
+            request_prompt_map[unique_request_id] = req.text
             generators.append(
                 self.engine.generate(
                     inputs=inputs,
                     sampling_params=sampling_params,
-                    request_id=f"{request_id}-{i}",
+                    request_id=unique_request_id,
                     **adapter_kwargs,
                     **kwargs,
                 ),
@@ -283,6 +287,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             #     # Abort the request if the client disconnects.
             #     await self.engine.abort(f"{request_id}-{i}")
             #     return self.create_error_response("Client disconnected")
+            if res.prompt is None:
+                res.prompt = request_prompt_map[res.request_id]
             responses[i] = res
             service_metrics.observe_queue_time(res)
 
@@ -322,7 +328,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         return BatchedGenerationResponse(responses=responses)
 
     @log_rpc_handler_errors
-    async def GenerateStream(
+    async def GenerateStream(  # noqa: PLR0915
         self,
         request: SingleGenerationRequest,
         context: ServicerContext,
@@ -378,6 +384,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         last_engine_response = None
         # TODO handle cancellation
         async for result in result_generator:
+            if result.prompt is None:
+                result.prompt = request.request.text
             last_engine_response = result
             if first_response is None:
                 service_metrics.observe_queue_time(result)
