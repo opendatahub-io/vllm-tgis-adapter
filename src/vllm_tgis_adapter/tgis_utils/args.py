@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 
+from vllm.engine.arg_utils import StoreBoolean
 from vllm.utils import FlexibleArgumentParser
 
 from vllm_tgis_adapter.grpc.validation import MAX_TOP_N_TOKENS
@@ -25,12 +26,18 @@ def _switch_action_default(action: argparse.Action) -> None:
     if not env_val:
         return
 
-    val: bool | str | int
-    if action.type in [bool, _bool_from_string]:
+    val: bool | str
+    # type=bool does not have the expected behavior, eg. bool("false") == True
+    # Also handle special actions for boolean args
+    if action.type is bool or type(action) in [
+        argparse._StoreTrueAction,  # noqa: SLF001
+        argparse._StoreFalseAction,  # noqa: SLF001
+        StoreBoolean,
+    ]:
         val = _bool_from_string(env_val)
-    elif action.type is int:
-        val = int(env_val)
     else:
+        # for non-string args, the string value of the env var will be parsed
+        # based on the action.type when setting from the default value
         val = env_val
     action.default = val
 
