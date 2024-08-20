@@ -696,7 +696,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         return stop_reason, stop_sequence
 
     @staticmethod
-    def _convert_tokens(  # noqa: PLR0913
+    def _convert_tokens(  # noqa: PLR0913 C901
         token_ids: list[int],
         logprobs_list: list[dict[int, Logprob] | None] | None,
         *,
@@ -731,7 +731,14 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 if include_ranks:
                     assert logprob.rank is not None
 
-                    token_info.rank = logprob.rank
+                    # token_info.rank is an unsigned int
+                    # logprob.rank can come back as -1 if filled with "dummy"
+                    # values as it is with speculative decoding when logprobs
+                    # are disabled via disable_logprobs_during_spec_decoding
+                    if logprob.rank < 0:
+                        token_info.rank = 0
+                    else:
+                        token_info.rank = logprob.rank
             if top_n_tokens:
                 items = sorted(
                     logprobs.items(),
