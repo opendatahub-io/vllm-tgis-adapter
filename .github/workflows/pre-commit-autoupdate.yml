@@ -19,11 +19,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Update pre-commit
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup pre-commit
+        run: |
+          python -m pip install --upgrade pre-commit
+          pre-commit --version
+
+      - name: Run pre-commit autoupdate
         id: autoupdate
         run: |
-          echo "log<<EOF"
-          nox -v --session pre-commit autoupdate | tee -a >(cat >> $GITHUB_OUTPUT)
+          echo "log<<EOF" >>$GITHUB_OUTPUT
+          pre-commit autoupdate | tee -a >(cat >> $GITHUB_OUTPUT)
           echo 'EOF' >> $GITHUB_OUTPUT
 
       - name: Check diff
@@ -41,8 +51,21 @@ jobs:
         run: |
           set -xeu
 
+          git switch -c pre-commit-autoupdate
+          git add .
+          git config --global user.name "pre-commit autoupdate"
+          git config --global user.email "noreply@github.com"
+          git commit -m "pre-commit autoupdate"
+
+          git push --force --set-upstream origin pre-commit-autoupdate
+
           title="pre-commit autoupdate"
-          body='```${{steps.autoupdate.output.log}}```'
+          body_file=/tmp/body
+          echo '```' >> $body_file
+          echo '$ pre-commit autoupdate' >> $body_file
+          echo '${{steps.autoupdate.outputs.log}}' >> $body_file
+          echo '```' >> $body_file
+          body="$(cat $body_file)"
 
           pr_number=$(gh pr list -S "pre-commit autoupdate" --json number --jq '.[0].number')
 
