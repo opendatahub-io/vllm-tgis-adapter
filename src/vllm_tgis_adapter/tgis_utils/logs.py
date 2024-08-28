@@ -28,6 +28,7 @@ def log_response(  # noqa: PLR0913
     engine_metrics: RequestMetrics | None,
     start_time: float,
     logger: logging.Logger,
+    headers: dict,
     sub_request_num: int = 0,
 ) -> None:
     if isinstance(request, BatchedGenerationRequest):
@@ -57,6 +58,7 @@ def log_response(  # noqa: PLR0913
         kind_log=kind_log,
         method_str=method_str,
         logger=logger,
+        headers=headers,
     )
 
 
@@ -102,6 +104,7 @@ def _log_response(  # noqa: PLR0913
     kind_log: str,
     method_str: str,
     logger: logging.Logger,
+    headers: dict,
 ) -> None:
     """Log responses similar to how the TGIS server does."""
     # This time contains both request validation and tokenization
@@ -138,7 +141,8 @@ def _log_response(  # noqa: PLR0913
         f"inference_time={inference_time * 1e3:.2f}ms "
         f"time_per_token={time_per_token * 1e3:.2f}ms "
         f"total_time={total_time * 1e3:.2f}ms "
-        f"input_toks={response.input_token_count}}}"
+        f"input_toks={response.input_token_count} "
+        f"x-correlation-id={headers.get('x-correlation-id')}}}"
     )
     stop_reason_str = StopReason.Name(response.stop_reason)
 

@@ -317,6 +317,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 engine_metrics=res.metrics,
                 sub_request_num=i,
                 logger=logger,
+                headers=headers,
             )
             service_metrics.observe_generation_success(start_time=start_time)
             responses[i] = response
