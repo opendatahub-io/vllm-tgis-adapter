@@ -134,6 +134,7 @@ def _log_response(  # noqa: PLR0913
     paramstr = text_format.MessageToString(params, as_one_line=True)
     span_str = (
         f"{method_str}{{input={short_input} prefix_id={prefix_id} "
+        f"correlation_id={headers.get('x-correlation-id')} "
         f"adapter_id={adapter_id} "
         f"input_chars=[{input_chars}] params={paramstr} "
         f"tokenization_time={tokenization_time * 1e3:.2f}ms "
@@ -141,8 +142,7 @@ def _log_response(  # noqa: PLR0913
         f"inference_time={inference_time * 1e3:.2f}ms "
         f"time_per_token={time_per_token * 1e3:.2f}ms "
         f"total_time={total_time * 1e3:.2f}ms "
-        f"input_toks={response.input_token_count} "
-        f"correlation_id={headers.get('x-correlation-id')}}}"
+        f"input_toks={response.input_token_count}}}"
     )
     stop_reason_str = StopReason.Name(response.stop_reason)
 
