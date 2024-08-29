@@ -141,9 +141,15 @@ def _log_response(  # noqa: PLR0913
         f"inference_time={inference_time * 1e3:.2f}ms "
         f"time_per_token={time_per_token * 1e3:.2f}ms "
         f"total_time={total_time * 1e3:.2f}ms "
-        f"input_toks={response.input_token_count} "
-        f"x-correlation-id={headers.get('x-correlation-id')}}}"
+        f"input_toks={response.input_token_count}}}"
     )
+    # add "x-correlation-id" from headers if it exists
+    if "x-correlation-id" in headers:
+        span_str = (
+            span_str[: span_str.rfind("}")]
+            + f" x-correlation-id={headers.get('x-correlation-id')}}}"
+        )
+
     stop_reason_str = StopReason.Name(response.stop_reason)
 
     if response.stop_reason == StopReason.ERROR:
