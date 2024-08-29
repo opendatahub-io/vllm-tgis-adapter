@@ -437,10 +437,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             request=request,
             response=first_response,
             start_time=start_time,
-            engine_metrics=last_engine_response.metrics
-            if last_engine_response
-            else None,
+            engine_metrics=(
+                last_engine_response.metrics if last_engine_response else None
+            ),
             logger=logger,
+            headers=headers,
         )
         service_metrics.observe_generation_success(start_time=start_time)
 
