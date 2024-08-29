@@ -142,7 +142,7 @@ def _log_response(  # noqa: PLR0913
         f"time_per_token={time_per_token * 1e3:.2f}ms "
         f"total_time={total_time * 1e3:.2f}ms "
         f"input_toks={response.input_token_count} "
-        f"x-correlation-id={headers.get('x-correlation-id')}}}"
+        f"correlation_id={headers.get('x-correlation-id')}}}"
     )
     stop_reason_str = StopReason.Name(response.stop_reason)
 
