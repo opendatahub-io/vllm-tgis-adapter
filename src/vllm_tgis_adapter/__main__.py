@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
+import traceback
 from concurrent.futures import FIRST_COMPLETED
 from typing import TYPE_CHECKING
 
@@ -17,7 +19,7 @@ from .grpc import run_grpc_server
 from .http import run_http_server
 from .logging import init_logger
 from .tgis_utils.args import EnvVarArgumentParser, add_tgis_args, postprocess_tgis_args
-from .utils import check_for_failed_tasks
+from .utils import check_for_failed_tasks, write_termination_log
 
 if TYPE_CHECKING:
     import argparse
@@ -43,10 +45,21 @@ async def start_servers(args: argparse.Namespace) -> None:
         )
         tasks.append(grpc_server_task)
 
+        runtime_error = None
         with contextlib.suppress(asyncio.CancelledError):
             # Both server tasks will exit normally on shutdown, so we await
             # FIRST_COMPLETED to catch either one shutting down.
             await asyncio.wait(tasks, return_when=FIRST_COMPLETED)
+            if engine and engine.errored and not engine.is_running:
+                # both servers shut down when an engine error
+                # is detected, with task done and exception handled
+                # here we just notify of that error and let servers be
+                runtime_error = RuntimeError(
+                    "AsyncEngineClient error detected,this may be caused by an \
+                        unexpected error in serving a request. \
+                        Please check the logs for more details."
+                )
+
         # Once either server shuts down, cancel the other
         for task in tasks:
             task.cancel()
@@ -55,6 +68,22 @@ async def start_servers(args: argparse.Namespace) -> None:
         await asyncio.wait(tasks)
 
         check_for_failed_tasks(tasks)
+        if runtime_error:
+            raise runtime_error
+
+
+def run_and_catch_termination_cause(
+    loop: asyncio.AbstractEventLoop, task: asyncio.Task
+) -> None:
+    try:
+        loop.run_until_complete(task)
+    except Exception:
+        # Report the first exception as cause of termination
+        msg = traceback.format_exc()
+        write_termination_log(
+            msg, os.getenv("TERMINATION_LOG_DIR", "/dev/termination-log")
+        )
+        raise
 
 
 if __name__ == "__main__":
@@ -75,4 +104,5 @@ if __name__ == "__main__":
 
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.new_event_loop()
-    loop.run_until_complete(start_servers(args))
+    task = loop.create_task(start_servers(args))
+    run_and_catch_termination_cause(loop, task)
