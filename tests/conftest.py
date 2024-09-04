@@ -11,7 +11,7 @@ import vllm
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.utils import FlexibleArgumentParser
 
-from vllm_tgis_adapter.__main__ import start_servers
+from vllm_tgis_adapter.__main__ import run_and_catch_termination_cause, start_servers
 from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
 from vllm_tgis_adapter.healthcheck import health_check
 from vllm_tgis_adapter.tgis_utils.args import (
@@ -69,6 +69,11 @@ def disable_frontend_multiprocessing(request):
 
 
 @pytest.fixture
+def server_args(request: pytest.FixtureRequest):
+    return request.param if hasattr(request, "param") else []
+
+
+@pytest.fixture
 def args(  # noqa: PLR0913
     request: pytest.FixtureRequest,
     monkeypatch,
@@ -76,11 +81,13 @@ def args(  # noqa: PLR0913
     http_server_port: ArgFixture[int],
     lora_available: ArgFixture[bool],
     disable_frontend_multiprocessing,
+    server_args: ArgFixture[list[str]],
 ) -> argparse.Namespace:
     """Return parsed CLI arguments for the adapter/vLLM."""
     # avoid parsing pytest arguments as vllm/vllm_tgis_adapter arguments
 
-    extra_args: list[str] = []
+    # Extra server init flags
+    extra_args: list[str] = [*server_args]
     if lora_available:
         name = request.getfixturevalue("lora_adapter_name")
         path = request.getfixturevalue("lora_adapter_path")
@@ -179,9 +186,8 @@ def _servers(
 
     def target():
         nonlocal task
-
         task = loop.create_task(start_servers(args))
-        loop.run_until_complete(task)
+        run_and_catch_termination_cause(loop, task)
 
     t = threading.Thread(target=target)
     t.start()
@@ -195,7 +201,7 @@ def _servers(
 
         t.join()
 
-    # rorkaround: Instantiating the TGISStatLogger multiple times creates
+    # workaround: Instantiating the TGISStatLogger multiple times creates
     # multiple Gauges etc which can only be instantiated once.
     # By unregistering the Collectors from the REGISTRY we can
     # work around this problem.

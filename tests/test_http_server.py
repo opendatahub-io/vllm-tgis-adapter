@@ -16,7 +16,7 @@ def test_completions(http_server_url, _servers):
     response = requests.post(
         f"{http_server_url}/v1/completions",
         json={
-            "prompt": "The answer tho life the universe and everything is ",
+            "prompt": "The answer to life the universe and everything is ",
             "model": model_id,
         },
     )
