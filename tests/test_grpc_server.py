@@ -3,7 +3,7 @@ import pytest
 from .utils import GrpcClient
 
 
-@pytest.fixture()
+@pytest.fixture
 def grpc_client(grpc_server_address, _servers):
     """Return a grpc client connected to the grpc server."""
     host, port = grpc_server_address.split(":")
