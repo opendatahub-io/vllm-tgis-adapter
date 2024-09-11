@@ -32,13 +32,13 @@ if TYPE_CHECKING:
     ArgFixture = Annotated[T, pytest.fixture]
 
 
-@pytest.fixture()
+@pytest.fixture
 def lora_available() -> bool:
     # lora does not work on cpu
     return not vllm.config.is_cpu()
 
 
-@pytest.fixture()
+@pytest.fixture
 def lora_adapter_name(request: pytest.FixtureRequest) -> str:
     if not request.getfixturevalue("lora_available"):
         pytest.skip("Lora is not available with this configuration")
@@ -46,7 +46,7 @@ def lora_adapter_name(request: pytest.FixtureRequest) -> str:
     return "lora-test"
 
 
-@pytest.fixture()
+@pytest.fixture
 def lora_adapter_path(request: pytest.FixtureRequest) -> str:
     if not request.getfixturevalue("lora_available"):
         pytest.skip("Lora is not available with this configuration")
@@ -68,7 +68,7 @@ def disable_frontend_multiprocessing(request):
     return request.param
 
 
-@pytest.fixture()
+@pytest.fixture
 def args(  # noqa: PLR0913
     request: pytest.FixtureRequest,
     monkeypatch,
@@ -109,31 +109,31 @@ def args(  # noqa: PLR0913
     return args
 
 
-@pytest.fixture()
+@pytest.fixture
 def grpc_server_port() -> int:
     """Port for the grpc server."""
     return get_random_port()
 
 
-@pytest.fixture()
+@pytest.fixture
 def grpc_server_address(grpc_server_port: ArgFixture[int]) -> str:
     """Address for the grpc server."""
     return f"localhost:{grpc_server_port}"
 
 
-@pytest.fixture()
+@pytest.fixture
 def http_server_port() -> int:
     """Port for the http server."""
     return get_random_port()
 
 
-@pytest.fixture()
+@pytest.fixture
 def http_server_url(http_server_port: ArgFixture[int]) -> str:
     """Url for the http server."""
     return f"http://localhost:{http_server_port}"
 
 
-@pytest.fixture()
+@pytest.fixture
 def _servers(
     args: ArgFixture[argparse.Namespace],
     grpc_server_address: ArgFixture[str],
