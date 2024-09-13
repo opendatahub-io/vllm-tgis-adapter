@@ -26,6 +26,7 @@ from vllm.tracing import (
     extract_trace_headers,
     log_tracing_disabled_warning,
 )
+from vllm.utils import iterate_with_cancellation
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
@@ -253,7 +254,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 prompt=req.text,
                 prompt_token_ids=input_ids,
             )
-            kwargs = {}
+            kwargs = adapter_kwargs
             is_tracing_enabled = await self.engine.is_tracing_enabled()
             headers = dict(context.invocation_metadata())
             if is_tracing_enabled:
@@ -265,24 +266,21 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                     inputs=inputs,
                     sampling_params=sampling_params,
                     request_id=f"{request_id}-{i}",
-                    **adapter_kwargs,
                     **kwargs,
                 ),
             )
 
-        # TODO handle cancellation
+        async def is_cancelled() -> bool:
+            return context.cancelled()
+
         result_generator: AsyncIterator[tuple[int, RequestOutput]] = (
-            merge_async_iterators(*generators)
+            merge_async_iterators(*generators, is_cancelled=is_cancelled)
         )
 
         resp_options = request.params.response
         responses: list = [None] * request_count
         time_limit_reached = False
         async for i, res in result_generator:
-            # if await raw_request.is_disconnected():
-            #     # Abort the request if the client disconnects.
-            #     await self.engine.abort(f"{request_id}-{i}")
-            #     return self.create_error_response("Client disconnected")
             if res.prompt is None:
                 res.prompt = request.requests[i].text
             responses[i] = res
@@ -370,6 +368,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             **kwargs,
         )
 
+        async def is_cancelled() -> bool:
+            return context.cancelled()
+
+        result_generator = iterate_with_cancellation(result_generator, is_cancelled)
+
         resp_options = request.params.response
 
         first_response = None
@@ -379,7 +382,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         time_limit_reached = False
         full_output = ""
         last_engine_response = None
-        # TODO handle cancellation
         async for result in result_generator:
             if result.prompt is None:
                 result.prompt = request.request.text
