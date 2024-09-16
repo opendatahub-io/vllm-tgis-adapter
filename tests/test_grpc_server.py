@@ -55,3 +55,30 @@ def test_lora_request(grpc_client, lora_adapter_name):
     response = grpc_client.make_request("hello", adapter_id=lora_adapter_name)
 
     assert response.text
+
+
+def test_request_id(grpc_client, mocker):
+    from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService, uuid
+
+    spy = mocker.spy(TextGenerationService, "request_id")
+    response = grpc_client.make_request(
+        "The answer to life the universe and everything is ",
+        metadata=[("x-correlation-id", "dummy-correlation-id")],
+    )
+    assert response.text
+
+    spy.assert_called_once()
+    assert spy.spy_return == "dummy-correlation-id"
+
+    spy.reset_mock()
+
+    request_id = uuid.uuid4()
+    mocker.patch.object(uuid, "uuid4", return_value=request_id)
+
+    response = grpc_client.make_request(
+        "The answer to life the universe and everything is ",
+    )
+    assert response.text
+
+    spy.assert_called_once()
+    assert spy.spy_return == request_id.hex

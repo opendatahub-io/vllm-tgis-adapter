@@ -518,8 +518,17 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         return response
 
     @staticmethod
-    def request_id(context: ServicerContext) -> str:  # noqa:  ARG004
-        return uuid.uuid4().hex
+    def request_id(context: ServicerContext) -> str:
+        metadata = context.invocation_metadata()
+        if not metadata:
+            return uuid.uuid4().hex
+
+        correlation_id = dict(metadata).get("x-correlation-id")
+
+        if not correlation_id:
+            return uuid.uuid4().hex
+
+        return correlation_id
 
     async def _validate_and_convert_params(
         self,

@@ -126,6 +126,7 @@ class GrpcClient:
         model_id: str | None = None,
         max_new_tokens: int = 10,
         adapter_id: str | None = None,
+        metadata: list[tuple[str, str]] | None = None,
     ) -> GenerationResponse | Sequence[GenerationResponse]:
         # assert model_id  # FIXME: is model_id required?
 
@@ -143,6 +144,7 @@ class GrpcClient:
 
         response = self.generation_service_stub.Generate(
             request=request,
+            metadata=metadata,
         )
 
         if single_request:
