@@ -3,6 +3,8 @@ name: Tests
 on:
   push:
     branches: [main]
+  pull_request:
+  merge_group:
   workflow_dispatch:
   schedule:
     - cron: "20 4 * * 2" # once a week
@@ -73,6 +75,7 @@ jobs:
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
+        if: github.actor != 'dependabot[bot]'
         with:
           fail_ci_if_error: true
         env:
