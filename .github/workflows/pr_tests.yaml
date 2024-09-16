@@ -1,11 +1,13 @@
 name: Tests
 
 on:
-  push:
-    branches: [main]
+  # this target allows you to run tests in base context and access secrets
+  # so we can have dependabot PRs auto-merge on test pass
+  pull_request_target:
+    branches:
+      - main
+  merge_group:
   workflow_dispatch:
-  schedule:
-    - cron: "20 4 * * 2" # once a week
 
 env:
   FORCE_COLOR: "1"
@@ -35,10 +37,10 @@ jobs:
           - "git+https://github.com/opendatahub-io/vllm@main"
 
     steps:
-      - name: Check out the repository
+      - name: Check out the PR
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -71,7 +73,8 @@ jobs:
         env:
           VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
 
-      - name: Upload coverage report
+      - name: Upload coverage report (Dependabot only)
+        if: github.actor == 'dependabot[bot]'
         uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true
