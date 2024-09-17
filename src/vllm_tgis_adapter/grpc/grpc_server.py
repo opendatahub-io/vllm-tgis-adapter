@@ -233,8 +233,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
-        adapter_kwargs = await self._validate_adapters(request, context)
-        tokenizer = await self._get_tokenizer(adapter_kwargs)
+        kwargs = await self._validate_adapters(request, context)
+        tokenizer = await self._get_tokenizer(kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
             request.params, tokenizer, context
@@ -254,7 +254,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 prompt=req.text,
                 prompt_token_ids=input_ids,
             )
-            kwargs = adapter_kwargs
             is_tracing_enabled = await self.engine.is_tracing_enabled()
             headers = dict(context.invocation_metadata())
             if is_tracing_enabled:
