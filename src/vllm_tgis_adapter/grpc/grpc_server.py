@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     from transformers import PreTrainedTokenizer
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
-    from vllm.engine.protocol import AsyncEngineClient
+    from vllm.engine.protocol import EngineClient
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
 
@@ -177,12 +177,12 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     def __init__(
         self,
-        engine: AsyncEngineClient | AsyncLLMEngine,
+        engine: EngineClient | AsyncLLMEngine,
         args: argparse.Namespace,
         health_servicer: health.HealthServicer,
         stop_event: asyncio.Event,
     ):
-        self.engine: AsyncEngineClient = engine
+        self.engine: EngineClient = engine
         self.stop_event = stop_event
 
         # This is set in post_init()
@@ -262,7 +262,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 log_tracing_disabled_warning()
             generators.append(
                 self.engine.generate(
-                    inputs=inputs,
+                    inputs,
                     sampling_params=sampling_params,
                     request_id=f"{request_id}-{i}",
                     **adapter_kwargs,
@@ -363,7 +363,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
             # re-tokenized when `prompt_token_ids` is supplied
-            inputs=inputs,
+            inputs,
             sampling_params=sampling_params,
             request_id=request_id,
             **adapter_kwargs,
@@ -891,7 +891,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
 async def start_grpc_server(
     args: argparse.Namespace,
-    engine: AsyncLLMEngine | AsyncEngineClient,
+    engine: AsyncLLMEngine | EngineClient,
     stop_event: asyncio.Event,
 ) -> aio.Server:
     server = aio.server()
@@ -957,7 +957,7 @@ async def start_grpc_server(
 
 async def run_grpc_server(
     args: argparse.Namespace,
-    engine: AsyncEngineClient | AsyncLLMEngine,
+    engine: EngineClient | AsyncLLMEngine,
 ) -> None:
     stop_event = asyncio.Event()
     server = await start_grpc_server(args, engine, stop_event)
