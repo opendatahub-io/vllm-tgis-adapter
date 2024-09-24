@@ -65,7 +65,12 @@ if TYPE_CHECKING:
     from transformers import PreTrainedTokenizer
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
-    from vllm.engine.protocol import EngineClient
+
+    try:
+        from vllm.engine.protocol import EngineClient
+    except ImportError:
+        # fallback for versions <=v0.6.1.post2
+        from vllm.engine.protocol import AsyncEngineClient as EngineClient
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
 
@@ -177,7 +182,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     def __init__(
         self,
-        engine: EngineClient | AsyncLLMEngine,
+        engine: EngineClient,
         args: argparse.Namespace,
         health_servicer: health.HealthServicer,
         stop_event: asyncio.Event,
@@ -891,7 +896,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
 async def start_grpc_server(
     args: argparse.Namespace,
-    engine: AsyncLLMEngine | EngineClient,
+    engine: EngineClient,
     stop_event: asyncio.Event,
 ) -> aio.Server:
     server = aio.server()
@@ -957,7 +962,7 @@ async def start_grpc_server(
 
 async def run_grpc_server(
     args: argparse.Namespace,
-    engine: EngineClient | AsyncLLMEngine,
+    engine: EngineClient,
 ) -> None:
     stop_event = asyncio.Event()
     server = await start_grpc_server(args, engine, stop_event)
