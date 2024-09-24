@@ -262,7 +262,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 log_tracing_disabled_warning()
             generators.append(
                 self.engine.generate(
-                    inputs,
+                    inputs=inputs,
                     sampling_params=sampling_params,
                     request_id=f"{request_id}-{i}",
                     **adapter_kwargs,
@@ -363,7 +363,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
             # re-tokenized when `prompt_token_ids` is supplied
-            inputs,
+            inputs=inputs,
             sampling_params=sampling_params,
             request_id=request_id,
             **adapter_kwargs,
