@@ -39,7 +39,11 @@ def _switch_action_default(action: argparse.Action) -> None:
         # for non-string args, the string value of the env var will be parsed
         # based on the action.type when setting from the default value
         val = env_val
-    action.default = val
+
+    if action.nargs in ("+", "*"):
+        action.default = [val]
+    else:
+        action.default = val
 
 
 class EnvVarArgumentParser(FlexibleArgumentParser):
