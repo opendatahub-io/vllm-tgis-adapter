@@ -25,6 +25,22 @@ def test_generation_request(grpc_client):
     assert response.stop_reason is not None
 
 
+def test_tokenize_request(grpc_client):
+    response_generate = grpc_client.make_request(
+        "The answer to life the universe and everything is "
+    )
+    response_tokenize = grpc_client.make_request_tokenize(
+        "The answer to life the universe and everything is "
+    )
+
+    assert response_tokenize.text
+    assert (
+        response_tokenize.generated_token_count
+        == response_generate.generated_token_count
+    )
+    assert response_tokenize.stop_reason is not None
+
+
 def test_generation_request_stream(grpc_client):
     streaming_response = grpc_client.make_request_stream(
         "The answer to life the universe and everything is ",

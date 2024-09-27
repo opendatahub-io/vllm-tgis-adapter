@@ -11,6 +11,7 @@ import grpc
 
 from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
     BatchedGenerationRequest,
+    BatchedTokenizeRequest,
     GenerationRequest,
     ModelInfoRequest,
     Parameters,
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
         GenerationResponse,
         ModelInfoResponse,
+        TokenizeResponse,
     )
 
 _T = TypeVar("_T")
@@ -172,6 +174,30 @@ class GrpcClient:
             yield from self.generation_service_stub.GenerateStream(request=request)
         except grpc._channel._MultiThreadedRendezvous as exc:  # noqa: SLF001
             raise RuntimeError(exc.details()) from exc
+
+    def make_request_tokenize(
+        self,
+        text: str | list[str],
+        model_id: str | None = None,
+        adapter_id: str | None = None,
+    ) -> TokenizeResponse | Sequence[TokenizeResponse]:
+        if single_request := isinstance(text, str):
+            text = [text]
+
+        request = BatchedTokenizeRequest(
+            model_id=model_id,
+            requests=[GenerationRequest(text=piece) for piece in text],
+            adapter_id=adapter_id,
+        )
+
+        response = self.generation_service_stub.Tokenize(
+            request=request,
+        )
+
+        if single_request:
+            return response.responses[0]
+
+        return response.responses
 
     def __enter__(self):  # noqa: D105
         return self
