@@ -94,12 +94,7 @@ if __name__ == "__main__":
     args = postprocess_tgis_args(parser.parse_args())
     assert args is not None
 
-    version_info = (
-        f"{vllm.__version__}" + vllm.__commit__
-        if vllm.__commit__ != "COMMIT_HASH_PLACEHOLDER"
-        else "unknown"
-    )
-    logger.info("vLLM version %s", version_info)
+    logger.info("vLLM version %s", f"{vllm.__version__}")
     logger.info("args: %s", args)
 
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
