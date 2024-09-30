@@ -13,6 +13,7 @@ from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
     BatchedGenerationRequest,
     BatchedTokenizeRequest,
     GenerationRequest,
+    TokenizeRequest,
     ModelInfoRequest,
     Parameters,
     SingleGenerationRequest,
@@ -186,7 +187,7 @@ class GrpcClient:
 
         request = BatchedTokenizeRequest(
             model_id=model_id,
-            requests=[GenerationRequest(text=piece) for piece in text],
+            requests=[TokenizeRequest(text=piece) for piece in text],
             adapter_id=adapter_id,
         )
 
