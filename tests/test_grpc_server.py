@@ -27,11 +27,13 @@ def test_generation_request(grpc_client):
 
 def test_tokenize_request(grpc_client):
     response_generate = grpc_client.make_request(
-        "Please answer the following question.\nhow far is Paris from New York?",
+        text="Please answer the following question.\nhow far is Paris from New York?",
         max_new_tokens=50,
+        model_id="facebook/opt-125m",
     )
     response_tokenize = grpc_client.make_request_tokenize(
-        "Please answer the following question.\nhow far is Paris from New York?"
+        text="Please answer the following question.\nhow far is Paris from New York?",
+        model_id="facebook/opt-125m",
     )
 
     assert response_tokenize.token_count == response_generate.generated_token_count
