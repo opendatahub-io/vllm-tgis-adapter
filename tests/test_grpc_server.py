@@ -27,7 +27,8 @@ def test_generation_request(grpc_client):
 
 def test_tokenize_request(grpc_client):
     response_generate = grpc_client.make_request(
-        "Please answer the following question.\nhow far is Paris from New York?"
+        "Please answer the following question.\nhow far is Paris from New York?",
+        max_new_tokens=50,
     )
     response_tokenize = grpc_client.make_request_tokenize(
         "Please answer the following question.\nhow far is Paris from New York?"
