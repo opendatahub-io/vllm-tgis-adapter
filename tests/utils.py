@@ -13,11 +13,11 @@ from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
     BatchedGenerationRequest,
     BatchedTokenizeRequest,
     GenerationRequest,
-    TokenizeRequest,
     ModelInfoRequest,
     Parameters,
     SingleGenerationRequest,
     StoppingCriteria,
+    TokenizeRequest,
 )
 from vllm_tgis_adapter.grpc.pb.generation_pb2_grpc import GenerationServiceStub
 
