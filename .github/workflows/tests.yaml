@@ -48,6 +48,7 @@ jobs:
           tool-cache: false
           large-packages: false
           docker-images: false
+
       - name: Install vLLM build deps
         run: |
           sudo apt update
@@ -58,6 +59,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.pyv }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Upgrade pip and nox
         run: |
@@ -65,11 +68,25 @@ jobs:
           pip --version
           nox --version
 
+      - name: Cache nox lint env
+        id: cache-lint
+        uses: actions/cache@v4
+        with:
+          path: .nox/lint-${{ matrix.pyv }}
+          key: ${{ runner.os }}-lint-${{ matrix.pyv }}-${{ hashFiles('noxfile.py') }}
+
       - name: Lint code and check dependencies
-        run: nox -v -s lint-${{ matrix.pyv }}
+        run: nox --reuse-venv=yes -v -s lint-${{ matrix.pyv }}
+
+      - name: Cache nox tests env
+        id: cache-tests
+        uses: actions/cache@v4
+        with:
+          path: .nox/tests-${{ matrix.pyv }}
+          key: ${{ runner.os }}-tests-${{ matrix.pyv }}-${{ matrix.vllm_version }}-${{ hashFiles('noxfile.py') }}
 
       - name: Run tests
-        run: nox -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
+        run: nox --reuse-venv=yes -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
         env:
           VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
 
@@ -81,5 +98,12 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Cache nox build env
+        id: cache-build
+        uses: actions/cache@v4
+        with:
+          path: .nox/build-${{ matrix.pyv }}
+          key: ${{ runner.os }}-build-${{ matrix.pyv }}-${{ hashFiles('noxfile.py') }}
+
       - name: Build package
-        run: nox -s build-${{ matrix.pyv }}
+        run: nox --reuse-venv=yes -s build-${{ matrix.pyv }}
