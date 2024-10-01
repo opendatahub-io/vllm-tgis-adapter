@@ -68,25 +68,18 @@ jobs:
           pip --version
           nox --version
 
-      - name: Cache nox lint env
-        id: cache-lint
+      - name: nox envs cache
+        id: cache
         uses: actions/cache@v4
         with:
-          path: .nox/lint-${{ matrix.pyv }}
-          key: ${{ runner.os }}-lint-${{ matrix.pyv }}-${{ hashFiles('noxfile.py') }}
+          path: /home/runner/.nox
+          key: ${{ runner.os }}-${{ matrix.pyv }}-${{ hashFiles('noxfile.py') }}
 
       - name: Lint code and check dependencies
-        run: nox --reuse-venv=yes -v -s lint-${{ matrix.pyv }}
-
-      - name: Cache nox tests env
-        id: cache-tests
-        uses: actions/cache@v4
-        with:
-          path: .nox/tests-${{ matrix.pyv }}
-          key: ${{ runner.os }}-tests-${{ matrix.pyv }}-${{ matrix.vllm_version }}-${{ hashFiles('noxfile.py') }}
+        run: nox --envdir ~/.nox --reuse-venv=yes -v -s lint-${{ matrix.pyv }}
 
       - name: Run tests
-        run: nox --reuse-venv=yes -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
+        run: nox --envdir ~/.nox --reuse-venv=yes -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
         env:
           VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
 
@@ -98,12 +91,5 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Cache nox build env
-        id: cache-build
-        uses: actions/cache@v4
-        with:
-          path: .nox/build-${{ matrix.pyv }}
-          key: ${{ runner.os }}-build-${{ matrix.pyv }}-${{ hashFiles('noxfile.py') }}
-
       - name: Build package
-        run: nox --reuse-venv=yes -s build-${{ matrix.pyv }}
+        run: nox --envdir ~/.nox --reuse-venv=yes -s build-${{ matrix.pyv }}
