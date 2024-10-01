@@ -855,7 +855,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         # other threads
         for req in request.requests:
             batch_encoding = tokenizer.encode_plus(
-                text=req.text, return_offsets_mapping=request.return_offsets
+                text=req.text,
+                return_offsets_mapping=request.return_offsets,
+                add_special_tokens=ADD_SPECIAL_TOKENS,
             )
 
             # Tokenize the input text
