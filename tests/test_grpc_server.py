@@ -25,6 +25,14 @@ def test_generation_request(grpc_client):
     assert response.stop_reason is not None
 
 
+def test_tokenize_request(grpc_client):
+    response_tokenize = grpc_client.make_request_tokenize(
+        text="Please answer the following question.\nhow far is Paris from New York?",
+    )
+
+    assert response_tokenize.token_count
+
+
 def test_generation_request_stream(grpc_client):
     streaming_response = grpc_client.make_request_stream(
         "The answer to life the universe and everything is ",
