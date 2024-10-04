@@ -394,7 +394,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             last_engine_response = result
             # In chunked prefill case it's possible that there will be
             # multiple prompt-only outputs
-            if first_response is not None or (
+            if first_response is None or (
                 result.prompt_token_ids and not generated_token_count
             ):
                 if first_response is None:
@@ -475,19 +475,20 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         response: GenerationResponse,
         tokenizer: PreTrainedTokenizer,
     ) -> GenerationResponse:
-        response.input_token_count = len(result.prompt_token_ids)
-        if resp_options.input_tokens:
-            self._convert_tokens(
-                result.prompt_token_ids,
-                result.prompt_logprobs,
-                include_logprobs=resp_options.token_logprobs,
-                include_ranks=resp_options.token_ranks,
-                top_n_tokens=resp_options.top_n_tokens,
-                tokenizer=tokenizer,
-                token_infos=response.input_tokens,
-            )
+        if result.prompt_token_ids:
+            response.input_token_count = len(result.prompt_token_ids)
+            if resp_options.input_tokens:
+                self._convert_tokens(
+                    result.prompt_token_ids,
+                    result.prompt_logprobs,
+                    include_logprobs=resp_options.token_logprobs,
+                    include_ranks=resp_options.token_ranks,
+                    top_n_tokens=resp_options.top_n_tokens,
+                    tokenizer=tokenizer,
+                    token_infos=response.input_tokens,
+                )
 
-        if resp_options.input_text:
+        if resp_options.input_text and result.prompt:
             response.text = (
                 result.prompt if not response.text else result.prompt + response.text
             )
