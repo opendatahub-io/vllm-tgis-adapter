@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, TypeVar
 
 import pytest
@@ -30,6 +31,11 @@ if TYPE_CHECKING:
 
     YieldFixture = Generator[T, None, None]
     ArgFixture = Annotated[T, pytest.fixture]
+
+
+@pytest.fixture
+def prompt_tune_path():
+    return Path(__file__).parent / "fixtures" / "bloom_sentiment_1"
 
 
 @pytest.fixture
