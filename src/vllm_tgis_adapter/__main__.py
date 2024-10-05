@@ -55,10 +55,12 @@ async def start_servers(args: argparse.Namespace) -> None:
                 # is detected, with task done and exception handled
                 # here we just notify of that error and let servers be
                 runtime_error = RuntimeError(
-                    "AsyncEngineClient error detected,this may be caused by an \
+                    "AsyncEngineClient error detected, this may be caused by an \
                         unexpected error in serving a request. \
                         Please check the logs for more details."
                 )
+
+        failed_task = check_for_failed_tasks(tasks)
 
         # Once either server shuts down, cancel the other
         for task in tasks:
@@ -67,7 +69,12 @@ async def start_servers(args: argparse.Namespace) -> None:
         # Final wait for both servers to finish
         await asyncio.wait(tasks)
 
-        check_for_failed_tasks(tasks)
+        # Raise originally-failed task if applicable
+        if failed_task:
+            name, coro_name = failed_task.get_name(), failed_task.get_coro().__name__
+            exception = failed_task.exception()
+            raise RuntimeError(f"Failed task={name} ({coro_name})") from exception
+
         if runtime_error:
             raise runtime_error
 

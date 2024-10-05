@@ -1,23 +1,19 @@
 import asyncio
 from collections.abc import Iterable
+from typing import Optional
 
 
-def check_for_failed_tasks(tasks: Iterable[asyncio.Task]) -> None:
+def check_for_failed_tasks(tasks: Iterable[asyncio.Task]) -> Optional[asyncio.Task]:  # noqa: FA100
     """Check a sequence of tasks exceptions and raise the exception."""
     for task in tasks:
         try:
-            exc = task.exception()
-        except asyncio.InvalidStateError:
+            if task.exception():
+                return task
+        except (asyncio.InvalidStateError, asyncio.CancelledError):  # noqa: PERF203
             # no exception is set
-            continue
+            pass
 
-        if not exc:
-            continue
-
-        name = task.get_name()
-        coro_name = task.get_coro().__name__
-
-        raise RuntimeError(f"task={name} ({coro_name}) exception={exc!s}") from exc
+    return None
 
 
 def write_termination_log(msg: str, file: str = "/dev/termination-log") -> None:
