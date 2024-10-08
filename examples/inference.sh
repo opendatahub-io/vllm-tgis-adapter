@@ -11,7 +11,9 @@ grpcurl -v \
 	-d '{
     "requests": [
       {
-        "text": "At what temperature does Nitrogen boil?",
+        "text": "At what temperature does Nitrogen boil?"
+      },
+      {
         "text": "another request"
       }
     ],
