@@ -57,6 +57,7 @@ jobs:
 
       - name: Set up Python ${{ matrix.pyv }}
         uses: actions/setup-python@v5
+        id: setup-python
         with:
           python-version: ${{ matrix.pyv }}
           cache: pip
@@ -73,7 +74,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /home/runner/.nox
-          key: ${{ runner.os }}-${{ matrix.pyv }}-${{ hashFiles('noxfile.py') }}
+          key: ${{ runner.os }}-python-${{steps.setup-python.outputs.python-version }}-${{ hashFiles('noxfile.py') }}
 
       - name: Lint code and check dependencies
         run: nox --envdir ~/.nox --reuse-venv=yes -v -s lint-${{ matrix.pyv }}
