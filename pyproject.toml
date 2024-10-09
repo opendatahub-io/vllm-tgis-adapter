@@ -48,6 +48,7 @@ Source = "https://github.com/opendatahub-io/vllm-tgis-adapter"
 grpc_healthcheck = "vllm_tgis_adapter.healthcheck:cli"
 model-util = "vllm_tgis_adapter.tgis_utils.scripts:cli"
 text-generation-server = "vllm_tgis_adapter.tgis_utils.scripts:cli"
+convert_pt_to_prompt = "vllm_tgis_adapter.tgis_utils.convert_pt_to_prompt:cli"
 
 [project.optional-dependencies]
 tests = [
@@ -58,7 +59,7 @@ tests = [
 ]
 dev = [
   "vllm_tgis_adapter[tests]",
-  "ruff==0.6.7",
+  "ruff==0.6.9",
   "mypy==1.11.2",
   "types-protobuf==5.28.0.20240924",
   "types-requests==2.32.0.20240914"

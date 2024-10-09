@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Optional
 
 
@@ -30,3 +30,7 @@ def write_termination_log(msg: str, file: str = "/dev/termination-log") -> None:
 
         logger = init_logger("vllm-tgis-adapter")
         logger.exception("Unable to write termination logs to %s", file)
+
+
+def to_list(seq: Sequence[int]) -> list[int]:
+    return seq if isinstance(seq, list) else list(seq)
