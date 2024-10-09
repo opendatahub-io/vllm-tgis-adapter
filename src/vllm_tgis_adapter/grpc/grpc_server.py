@@ -108,7 +108,7 @@ async def _handle_exception(
     *args: tuple[Any],
     **kwargs: dict[str, Any],
 ) -> None:
-    context: ServicerContext = kwargs.get("context", None) or args[-1]
+    context: ServicerContext = kwargs.get("context") or args[-1]
     is_generate_fn = "generate" in func.__name__.lower()
 
     # self.engine on the servicer
@@ -133,7 +133,7 @@ async def _handle_exception(
             error_message = context.details()
         else:
             error_message = str(e)
-        request = kwargs.get("request", None) or args[-2]
+        request = kwargs.get("request") or args[-2]
         logs.log_error(
             request=request,
             exception_str=error_message,
