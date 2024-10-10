@@ -11,11 +11,15 @@ import concurrent.futures
 import dataclasses
 import json
 import re
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from vllm.lora.request import LoRARequest
 from vllm.prompt_adapter.request import PromptAdapterRequest
+
+from vllm_tgis_adapter.logging import init_logger
+from vllm_tgis_adapter.tgis_utils.convert_pt_to_prompt import convert_pt_to_peft
 
 from .validation import TGISValidationError
 
@@ -29,6 +33,8 @@ if TYPE_CHECKING:
 global_thread_pool = None  # used for loading adapter files from disk
 
 VALID_ADAPTER_ID_PATTERN = re.compile("[/\\w\\-]+")
+
+logger = init_logger(__name__)
 
 
 @dataclasses.dataclass
@@ -81,6 +87,20 @@ async def validate_adapters(
         loop = asyncio.get_running_loop()
         if global_thread_pool is None:
             global_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
+        # 🌶️🌶️🌶️ Check for caikit-style adapters first
+        if (
+            Path(local_adapter_path).exists()
+            and (Path(local_adapter_path) / "decoder.pt").exists()
+        ):
+            # Create new temporary directory and convert to peft format there
+            # NB: This requires write access to /tmp
+            # Intentionally setting delete=False, we need the new adapter
+            # files to exist for the life of the process
+            logger.info("Converting caikit-style adapter %s to peft format", adapter_id)
+            temp_dir = tempfile.TemporaryDirectory(delete=False)
+            convert_pt_to_peft(local_adapter_path, temp_dir.name)
+            local_adapter_path = temp_dir.name
 
         adapter_config = await loop.run_in_executor(
             global_thread_pool,
