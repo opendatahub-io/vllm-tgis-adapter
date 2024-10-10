@@ -88,35 +88,20 @@ async def validate_adapters(
         if global_thread_pool is None:
             global_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
-        # 🌶️🌶️🌶️ Check for caikit-style adapters first
-        if (
-            Path(local_adapter_path).exists()
-            and (Path(local_adapter_path) / "decoder.pt").exists()
-        ):
-            # Create new temporary directory and convert to peft format there
-            # NB: This requires write access to /tmp
-            # Intentionally setting delete=False, we need the new adapter
-            # files to exist for the life of the process
-            logger.info("Converting caikit-style adapter %s to peft format", adapter_id)
-            temp_dir = tempfile.TemporaryDirectory(delete=False)
-            convert_pt_to_peft(local_adapter_path, temp_dir.name)
-            local_adapter_path = temp_dir.name
+        # Increment the unique adapter id counter here in async land where we don't
+        # need to deal with thread-safety
+        unique_id = adapter_store.next_unique_id
+        adapter_store.next_unique_id += 1
 
-        adapter_config = await loop.run_in_executor(
+        adapter_metadata = await loop.run_in_executor(
             global_thread_pool,
-            _load_adapter_config_from_file,
+            _load_adapter_metadata,
             adapter_id,
             local_adapter_path,
+            unique_id,
         )
-        adapter_type = adapter_config.get("peft_type", None)
 
         # Add to cache
-        adapter_metadata = AdapterMetadata(
-            unique_id=adapter_store.next_unique_id,
-            adapter_type=adapter_type,
-            full_path=local_adapter_path,
-            full_config=adapter_config,
-        )
         adapter_store.adapters[adapter_id] = adapter_metadata
 
     # Build the proper vllm request object
@@ -142,8 +127,8 @@ async def validate_adapters(
     TGISValidationError.AdapterUnsupported.error(adapter_metadata.adapter_type)  # noqa: RET503
 
 
-def _load_adapter_config_from_file(adapter_id: str, adapter_path: str) -> dict:
-    """Get adapter from file.
+def _load_adapter_metadata(adapter_id: str, adapter_path: str, unique_id: int) -> dict:
+    """Get adapter metadata from files.
 
     Performs all the filesystem access required to deduce the type
     of the adapter. It's run in a separate thread pool executor so that file
@@ -154,17 +139,35 @@ def _load_adapter_config_from_file(adapter_id: str, adapter_path: str) -> dict:
             adapter_id, "directory does not exist"
         )
 
+    # 🌶️🌶️🌶️ Check for caikit-style adapters first
+    if Path(adapter_path).exists() and (Path(adapter_path) / "decoder.pt").exists():
+        # Create new temporary directory and convert to peft format there
+        # NB: This requires write access to /tmp
+        # Intentionally setting delete=False, we need the new adapter
+        # files to exist for the life of the process
+        logger.info("Converting caikit-style adapter %s to peft format", adapter_id)
+        temp_dir = tempfile.TemporaryDirectory(delete=False)
+        convert_pt_to_peft(adapter_path, temp_dir.name)
+        adapter_path = temp_dir.name
+
     adapter_config_path = Path(adapter_path) / "adapter_config.json"
     if not Path(adapter_config_path).exists():
         TGISValidationError.AdapterNotFound.error(
             adapter_id, "invalid adapter: no adapter_config.json found"
         )
 
-    # NB: blocks event loop
     with open(adapter_config_path) as adapter_config_file:
         adapter_config = json.load(adapter_config_file)
 
-    return adapter_config
+    adapter_type = adapter_config.get("peft_type", None)
+    adapter_metadata = AdapterMetadata(
+        unique_id=unique_id,
+        adapter_type=adapter_type,
+        full_path=adapter_path,
+        full_config=adapter_config,
+    )
+
+    return adapter_metadata
 
 
 def _reject_bad_adapter_id(adapter_id: str) -> None:
