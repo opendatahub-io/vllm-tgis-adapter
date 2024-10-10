@@ -1,0 +1,4 @@
+{
+  "num_virtual_tokens": 8,
+  "peft_type": "PROMPT_TUNING"
+}
