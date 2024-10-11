@@ -140,7 +140,7 @@ def _load_adapter_metadata(adapter_id: str, adapter_path: str, unique_id: int) -
         )
 
     # 🌶️🌶️🌶️ Check for caikit-style adapters first
-    if Path(adapter_path).exists() and (Path(adapter_path) / "decoder.pt").exists():
+    if (Path(adapter_path) / "decoder.pt").exists():
         # Create new temporary directory and convert to peft format there
         # NB: This requires write access to /tmp
         # Intentionally setting delete=False, we need the new adapter
