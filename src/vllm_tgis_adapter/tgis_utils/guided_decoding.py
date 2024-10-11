@@ -4,7 +4,6 @@ import asyncio
 import concurrent.futures
 from re import escape as regex_escape
 
-from transformers import PreTrainedTokenizer
 from vllm.model_executor.guided_decoding import outlines_decoding
 from vllm.model_executor.guided_decoding.outlines_decoding import (
     GuidedDecodingMode,
@@ -16,12 +15,13 @@ from vllm.model_executor.guided_decoding.outlines_logits_processors import (
     JSONLogitsProcessor,
     RegexLogitsProcessor,
 )
+from vllm.transformers_utils.tokenizer import AnyTokenizer
 
 from vllm_tgis_adapter.grpc.pb.generation_pb2 import DecodingParameters
 
 
 async def get_outlines_guided_decoding_logits_processor(
-    decoding_params: DecodingParameters, tokenizer: PreTrainedTokenizer
+    decoding_params: DecodingParameters, tokenizer: AnyTokenizer
 ) -> JSONLogitsProcessor | RegexLogitsProcessor | None:
     """Check for guided decoding parameters.
 
