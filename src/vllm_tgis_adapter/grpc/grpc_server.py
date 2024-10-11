@@ -6,11 +6,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable, Coroutine
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import grpc
 from grpc import StatusCode, aio
@@ -26,6 +22,7 @@ from vllm.tracing import (
     extract_trace_headers,
     log_tracing_disabled_warning,
 )
+from vllm.transformers_utils.tokenizer import AnyTokenizer  # noqa: TCH002
 from vllm.utils import iterate_with_cancellation
 
 from vllm_tgis_adapter.logging import init_logger
@@ -64,7 +61,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, MutableSequence
 
     from grpc.aio import ServicerContext
-    from transformers import PreTrainedTokenizer
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
 
@@ -473,7 +469,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         resp_options: ResponseOptions,
         sampling_params: SamplingParams,
         response: GenerationResponse,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: AnyTokenizer,
     ) -> GenerationResponse:
         if result.prompt_token_ids:
             response.input_token_count = len(result.prompt_token_ids)
@@ -504,7 +500,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         *,
         generated_token_count: int,
         max_is_token_limit: bool,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: AnyTokenizer,
         time_limit_reached: bool = False,
     ) -> GenerationResponse:
         stop_reason, stop_sequence = self._convert_reason(
@@ -548,7 +544,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
     async def _validate_and_convert_params(
         self,
         params: Parameters,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: AnyTokenizer,
         context: ServicerContext,
     ) -> tuple[SamplingParams, float | None]:
         """Return (sampling_params, deadline)."""
@@ -681,9 +677,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             await context.abort(StatusCode.INVALID_ARGUMENT, str(e))
         return adapters
 
-    async def _get_tokenizer(
-        self, adapter_kwargs: dict[str, Any]
-    ) -> PreTrainedTokenizer:
+    async def _get_tokenizer(self, adapter_kwargs: dict[str, Any]) -> AnyTokenizer:
         return await self.engine.get_tokenizer(
             adapter_kwargs.get("lora_request"),
         )
@@ -694,7 +688,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         *,
         max_is_token_limit: bool,
         time_limit_reached: bool,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: AnyTokenizer,
     ) -> tuple[StopReason, str | None]:
         finish_reason = output.finish_reason
         stop_sequence = None
@@ -735,7 +729,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         include_logprobs: bool,
         include_ranks: bool,
         top_n_tokens: int,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: AnyTokenizer,
         token_infos: MutableSequence[TokenInfo],  # OUT
         token_start_offset: int = 0,
     ) -> None:
@@ -789,7 +783,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         sampling_params: SamplingParams,
         truncate_input_tokens: int | None,
         prompt: str,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: AnyTokenizer,
         context: ServicerContext,
     ) -> tuple[list[int], bool]:
         assert self.config is not None
