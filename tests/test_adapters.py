@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -112,3 +113,28 @@ async def test_store_handles_multiple_adapters():
         adapters_1["lora_request"].lora_int_id
         < adapters_2["prompt_adapter_request"].prompt_adapter_id
     )
+
+
+@pytest.mark.asyncio
+async def test_cache_handles_concurrent_loads():
+    # Check that the cache does not hammer the filesystem when accessed concurrently
+    # Specifically, when concurrent requests for the same new adapter arrive
+
+    adapter_store = AdapterStore(cache_path=FIXTURES_DIR, adapters={})
+    # Use a caikit-style adapter that requires conversion, to test worst case
+    adapter_name = "bloom_sentiment_1"
+    request = BatchedGenerationRequest(
+        adapter_id=adapter_name,
+    )
+
+    # Fire off a bunch of concurrent requests for the same new adapter
+    tasks = [
+        asyncio.create_task(validate_adapters(request, adapter_store=adapter_store))
+        for _ in range(1000)
+    ]
+
+    # Await all tasks
+    await asyncio.gather(*tasks)
+
+    # The adapter store should have only given out one unique ID
+    assert adapter_store.next_unique_id == 2

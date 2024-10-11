@@ -50,6 +50,7 @@ class AdapterStore:
     cache_path: str  # Path to local store of adapters to load from
     adapters: dict[str, AdapterMetadata]
     next_unique_id: int = 1
+    load_locks: dict[str, asyncio.Lock] = dataclasses.field(default_factory=dict)
 
 
 async def validate_adapters(
@@ -78,31 +79,35 @@ async def validate_adapters(
     if not adapter_id or not adapter_store:
         return {}
 
-    # If not already cached, we need to validate that files exist and
-    # grab the type out of the adapter_config.json file
-    if (adapter_metadata := adapter_store.adapters.get(adapter_id)) is None:
-        _reject_bad_adapter_id(adapter_id)
-        local_adapter_path = str(Path(adapter_store.cache_path) / adapter_id)
+    # Guard against concurrent access for the same adapter
+    async with adapter_store.load_locks.setdefault(adapter_id, asyncio.Lock()):
+        # If not already cached, we need to validate that files exist and
+        # grab the type out of the adapter_config.json file
+        if (adapter_metadata := adapter_store.adapters.get(adapter_id)) is None:
+            _reject_bad_adapter_id(adapter_id)
+            local_adapter_path = str(Path(adapter_store.cache_path) / adapter_id)
 
-        loop = asyncio.get_running_loop()
-        if global_thread_pool is None:
-            global_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+            loop = asyncio.get_running_loop()
+            if global_thread_pool is None:
+                global_thread_pool = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=2
+                )
 
-        # Increment the unique adapter id counter here in async land where we don't
-        # need to deal with thread-safety
-        unique_id = adapter_store.next_unique_id
-        adapter_store.next_unique_id += 1
+            # Increment the unique adapter id counter here in async land where we don't
+            # need to deal with thread-safety
+            unique_id = adapter_store.next_unique_id
+            adapter_store.next_unique_id += 1
 
-        adapter_metadata = await loop.run_in_executor(
-            global_thread_pool,
-            _load_adapter_metadata,
-            adapter_id,
-            local_adapter_path,
-            unique_id,
-        )
+            adapter_metadata = await loop.run_in_executor(
+                global_thread_pool,
+                _load_adapter_metadata,
+                adapter_id,
+                local_adapter_path,
+                unique_id,
+            )
 
-        # Add to cache
-        adapter_store.adapters[adapter_id] = adapter_metadata
+            # Add to cache
+            adapter_store.adapters[adapter_id] = adapter_metadata
 
     # Build the proper vllm request object
     if adapter_metadata.adapter_type == "LORA":
