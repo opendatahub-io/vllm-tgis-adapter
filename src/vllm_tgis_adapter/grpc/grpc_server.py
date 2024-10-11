@@ -23,7 +23,6 @@ from vllm.tracing import (
     log_tracing_disabled_warning,
 )
 from vllm.transformers_utils.tokenizer import AnyTokenizer  # noqa: TCH002
-from vllm.transformers_utils.tokenizers.mistral import MistralTokenizer
 from vllm.utils import iterate_with_cancellation
 
 from vllm_tgis_adapter.logging import init_logger
@@ -856,12 +855,16 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         responses: list[TokenizeResponse] = []
-        is_mistral_tokenizer = isinstance(tokenizer, MistralTokenizer)
 
         # TODO: maybe parallelize, also move convert_ids_to_tokens into the
         # other threads
         for req in request.requests:
-            if is_mistral_tokenizer:
+            if not hasattr(tokenizer, "encode_plus"):
+                if request.return_offsets:
+                    raise ValueError(
+                        f"{type(tokenizer)} doesn't support "
+                        "return_offsets at the moment. "
+                    )
                 token_ids = tokenizer.encode(
                     prompt=req.text,
                 )
@@ -885,11 +888,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             offsets = None
 
             if request.return_offsets:
-                if is_mistral_tokenizer:
-                    raise ValueError(
-                        "Mistral tokenizer doesn't support "
-                        "return_offsets at the moment. "
-                    )
                 offsets = [
                     {"start": start, "end": end}
                     for start, end in batch_encoding.offset_mapping
