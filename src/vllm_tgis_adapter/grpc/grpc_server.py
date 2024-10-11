@@ -23,6 +23,7 @@ from vllm.tracing import (
     log_tracing_disabled_warning,
 )
 from vllm.transformers_utils.tokenizer import AnyTokenizer  # noqa: TCH002
+from vllm.transformers_utils.tokenizers.mistral import MistralTokenizer
 from vllm.utils import iterate_with_cancellation
 
 from vllm_tgis_adapter.logging import init_logger
@@ -855,18 +856,25 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         responses: list[TokenizeResponse] = []
+        is_mistral_tokenizer = isinstance(tokenizer, MistralTokenizer)
 
         # TODO: maybe parallelize, also move convert_ids_to_tokens into the
         # other threads
         for req in request.requests:
-            batch_encoding = tokenizer.encode_plus(
-                text=req.text,
-                return_offsets_mapping=request.return_offsets,
-                add_special_tokens=ADD_SPECIAL_TOKENS,
-            )
+            if is_mistral_tokenizer:
+                token_ids = tokenizer.encode(
+                    prompt=req.text,
+                )
+            else:
+                batch_encoding = tokenizer.encode_plus(
+                    text=req.text,
+                    return_offsets_mapping=request.return_offsets,
+                    add_special_tokens=ADD_SPECIAL_TOKENS,
+                )
 
-            # Tokenize the input text
-            token_ids = batch_encoding.input_ids
+                # Tokenize the input text
+                token_ids = batch_encoding.input_ids
+
             token_count = len(token_ids)
 
             if 0 < request.truncate_input_tokens < token_count:
@@ -877,13 +885,19 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             offsets = None
 
             if request.return_offsets:
-                offsets = [
-                    {"start": start, "end": end}
-                    for start, end in batch_encoding.offset_mapping
-                    if start is not None and end is not None
-                ]
-                # Truncate offset list if request.truncate_input_tokens
-                offsets = offsets[-token_count:]
+                if is_mistral_tokenizer:
+                    logger.warning(
+                        "Mistral tokenizer doesn't support "
+                        "return_offsets at the moment. "
+                    )
+                else:
+                    offsets = [
+                        {"start": start, "end": end}
+                        for start, end in batch_encoding.offset_mapping
+                        if start is not None and end is not None
+                    ]
+                    # Truncate offset list if request.truncate_input_tokens
+                    offsets = offsets[-token_count:]
 
             tokens = tokens[-token_count:] if request.return_tokens else None
 
