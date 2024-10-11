@@ -863,7 +863,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 if request.return_offsets:
                     raise ValueError(
                         f"{type(tokenizer)} doesn't support "
-                        "return_offsets at the moment. "
+                        "the return_offsets option"
                     )
                 token_ids = tokenizer.encode(
                     prompt=req.text,
