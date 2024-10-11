@@ -886,18 +886,17 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
             if request.return_offsets:
                 if is_mistral_tokenizer:
-                    logger.warning(
+                    raise ValueError(
                         "Mistral tokenizer doesn't support "
                         "return_offsets at the moment. "
                     )
-                else:
-                    offsets = [
-                        {"start": start, "end": end}
-                        for start, end in batch_encoding.offset_mapping
-                        if start is not None and end is not None
-                    ]
-                    # Truncate offset list if request.truncate_input_tokens
-                    offsets = offsets[-token_count:]
+                offsets = [
+                    {"start": start, "end": end}
+                    for start, end in batch_encoding.offset_mapping
+                    if start is not None and end is not None
+                ]
+                # Truncate offset list if request.truncate_input_tokens
+                offsets = offsets[-token_count:]
 
             tokens = tokens[-token_count:] if request.return_tokens else None
 
