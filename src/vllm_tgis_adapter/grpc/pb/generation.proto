@@ -51,6 +51,8 @@ message BatchedGenerationResponse {
 
 message GenerationRequest {
   string text = 2;
+  /// Optional, for fill-in-middle
+  string suffix = 3;
 }
 
 message GenerationResponse {
