@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from .utils import GrpcClient
@@ -90,3 +92,34 @@ def test_request_id(grpc_client, mocker):
 
     spy.assert_called_once()
     assert spy.spy_return == request_id.hex
+
+
+def test_error_handling(mocker):
+    from vllm.engine.multiprocessing import MQEngineDeadError
+
+    from vllm_tgis_adapter.grpc.grpc_server import _handle_exception, logger
+
+    def dummy_func():
+        pass
+
+    class DummyEngine:
+        errored = False
+        is_running = True
+
+    class DummyArg:
+        engine = DummyEngine()
+
+    # General error handling
+    key_error = KeyError()
+    dummy_arg_0 = DummyArg()
+    with pytest.raises(KeyError):
+        asyncio.run(_handle_exception(key_error, dummy_func, dummy_arg_0))
+
+    engine_error = MQEngineDeadError("foo:bar")
+
+    # Engine error handling
+    spy = mocker.spy(logger, "error")
+
+    # Does not raises exception
+    asyncio.run(_handle_exception(engine_error, dummy_func, dummy_arg_0))
+    spy.assert_called_once_with(engine_error)
