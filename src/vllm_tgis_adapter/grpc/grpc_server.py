@@ -14,6 +14,7 @@ from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
 from vllm.engine.async_llm_engine import AsyncLLMEngine
+from vllm.engine.multiprocessing import MQEngineDeadError
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import LLMInputs
 from vllm.sampling_params import RequestOutputKind, SamplingParams
@@ -149,6 +150,9 @@ async def _handle_exception(
             service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
         else:
             service_metrics.count_request_failure(FailureReasonLabel.UNKNOWN)
+        if isinstance(e, MQEngineDeadError):
+            logger.error(e)
+            return
         logger.exception("%s failed", func.__name__)
     raise e
 
