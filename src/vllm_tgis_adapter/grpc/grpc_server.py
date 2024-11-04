@@ -36,7 +36,6 @@ from vllm_tgis_adapter.tgis_utils.logits_processors import (
     TypicalLogitsWarperWrapper,
 )
 from vllm_tgis_adapter.tgis_utils.metrics import (
-    FailureReasonLabel,
     ServiceMetrics,
     TGISStatLogger,
 )
@@ -144,12 +143,14 @@ async def _handle_exception(
 
         if isinstance(e, OutOfMemoryError):
             logger.exception("%s caused GPU OOM error", func.__name__)
-            service_metrics.count_request_failure(FailureReasonLabel.OOM)
+            # service_metrics.count_request_failure(FailureReasonLabel.OOM)
             await context.abort(StatusCode.RESOURCE_EXHAUSTED, str(e))
         elif is_generate_fn:
-            service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
+            # service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
+            pass
         else:
-            service_metrics.count_request_failure(FailureReasonLabel.UNKNOWN)
+            # service_metrics.count_request_failure(FailureReasonLabel.UNKNOWN)
+            pass
         if isinstance(e, MQEngineDeadError):
             logger.error(e)
             return
@@ -237,7 +238,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         context: ServicerContext,
     ) -> BatchedGenerationResponse:
         start_time = time.time()
-        service_metrics.count_generate_request(len(request.requests))
+        # service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
         kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(kwargs)
@@ -290,7 +291,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             if res.prompt is None:
                 res.prompt = request.requests[i].text
             responses[i] = res
-            service_metrics.observe_queue_time(res)
+            # service_metrics.observe_queue_time(res)
 
             if (
                 deadline is not None
@@ -325,7 +326,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 logger=logger,
                 headers=headers,
             )
-            service_metrics.observe_generation_success(start_time=start_time)
+            # .observe_generation_success(start_time=start_time)
             responses[i] = response
 
         return BatchedGenerationResponse(responses=responses)
@@ -337,7 +338,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         context: ServicerContext,
     ) -> AsyncIterator[GenerationResponse]:
         start_time = time.time()
-        service_metrics.count_generate_request()
+        # service_metrics.count_generate_request()
         request_id = self.request_id(context)
         adapter_kwargs = await self._validate_adapters(request, context)
         tokenizer = await self._get_tokenizer(adapter_kwargs)
@@ -398,7 +399,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 result.prompt_token_ids and not generated_token_count
             ):
                 if first_response is None:
-                    service_metrics.observe_queue_time(result)
+                    # service_metrics.observe_queue_time(result)
+                    pass
 
                 if result.prompt is None:
                     result.prompt = request.request.text
@@ -465,7 +467,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             logger=logger,
             headers=headers,
         )
-        service_metrics.observe_generation_success(start_time=start_time)
+        # service_metrics.observe_generation_success(start_time=start_time)
 
     def _convert_input_details(
         self,
@@ -556,7 +558,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         try:
             validate_params(params, self.max_max_new_tokens)
         except ValueError as tgis_validation_error:
-            service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
+            # service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(tgis_validation_error))
 
         resp_options = params.response
@@ -660,7 +662,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         except ValueError as vllm_validation_error:
             # There may be validation cases caught by vLLM that are not covered
             # by the TGIS api validation
-            service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
+            # service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(vllm_validation_error))
 
         return sampling_params, deadline
@@ -677,7 +679,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 request=request, adapter_store=self.adapter_store
             )
         except ValueError as e:
-            service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
+            # service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(e))
         return adapters
 
@@ -852,7 +854,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         """
         # Log the incoming tokenization request for metrics
-        service_metrics.count_tokenization_request(request)
+        # service_metrics.count_tokenization_request(request)
 
         # TODO simplify to only check for lora adapter
         adapter_kwargs = await self._validate_adapters(request, context)
