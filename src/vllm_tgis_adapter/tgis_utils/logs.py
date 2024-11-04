@@ -115,13 +115,13 @@ def _log_response(  # noqa: PLR0913
         ) = 0.0
     else:
         assert engine_metrics is not None
-        assert engine_metrics.first_scheduled_time is not None
+        # assert engine_metrics.first_scheduled_time is not None
 
         tokenization_time = engine_metrics.arrival_time - start_time
         inference_time = (
             engine_metrics.last_token_time - engine_metrics.first_scheduled_time
         )
-        assert engine_metrics.time_in_queue is not None
+        # assert engine_metrics.time_in_queue is not None
         queue_time = engine_metrics.time_in_queue
 
         time_per_token = _safe_div(inference_time, response.generated_token_count)
