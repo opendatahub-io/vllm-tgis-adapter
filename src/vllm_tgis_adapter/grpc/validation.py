@@ -22,7 +22,6 @@ class TGISValidationError(str, Enum):
     https://github.ibm.com/ai-foundation/fmaas-inference-server/blob/main/router/src/validation.rs#L238-L271
     """
 
-    Temperature = "temperature must be >= 0.05"
     TopP = "top_p must be > 0.0 and <= 1.0"
     TopK = "top_k must be strictly positive"
     TypicalP = "typical_p must be <= 1.0"
@@ -139,8 +138,6 @@ def validate_params(  # noqa: C901
         )
     ):
         TGISValidationError.SampleParametersGreedy.error()
-    if sampling.temperature and sampling.temperature < 0.05:
-        TGISValidationError.Temperature.error()
     if sampling.top_k < 0:
         TGISValidationError.TopK.error()
     if not (0 <= sampling.top_p <= 1):

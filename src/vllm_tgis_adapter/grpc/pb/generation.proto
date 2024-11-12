@@ -132,8 +132,9 @@ message DecodingParameters {
 
 
 message SamplingParameters {
-  // Default (0.0) means disabled (equivalent to 1.0)
-  float temperature = 1;
+  // Unset will default to 1.0
+  // 0.0 is equivalent to greedy decoding
+  optional float temperature = 1;
   // Default (0) means disabled
   uint32 top_k = 2;
   // Default (0) means disabled (equivalent to 1.0)
