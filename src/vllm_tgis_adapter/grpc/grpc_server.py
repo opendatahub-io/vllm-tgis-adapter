@@ -630,11 +630,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         )
 
         random_sampling_params: dict[str, Any]
-        if greedy:
+        temperature = sampling.temperature if sampling.HasField("temperature") else 1.0
+        if greedy or temperature == 0.0:
+            # 0.0 temperature is equivalent to greedy decoding
             random_sampling_params = {"temperature": 0.0}
         else:
             random_sampling_params = {
-                "temperature": with_default(sampling.temperature, 1.0),
+                "temperature": temperature,
                 "top_k": with_default(sampling.top_k, -1),
                 "top_p": with_default(sampling.top_p, 1.0),
                 "seed": sampling.seed if sampling.HasField("seed") else None,
