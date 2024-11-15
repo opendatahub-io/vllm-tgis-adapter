@@ -16,7 +16,7 @@ from grpc_reflection.v1alpha import reflection
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.multiprocessing import MQEngineDeadError
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
-from vllm.inputs import LLMInputs
+from vllm.inputs import token_inputs
 from vllm.sampling_params import RequestOutputKind, SamplingParams
 from vllm.tracing import (
     contains_trace_headers,
@@ -257,7 +257,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 sampling_params, truncate_input_tokens, req.text, tokenizer, context
             )
 
-            inputs = LLMInputs(
+            inputs = token_inputs(
                 prompt=req.text,
                 prompt_token_ids=input_ids,
             )
@@ -356,7 +356,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             context,
         )
 
-        inputs = LLMInputs(
+        inputs = token_inputs(
             prompt=request.request.text,
             prompt_token_ids=input_ids,
         )
