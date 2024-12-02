@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 from re import escape as regex_escape
+from typing import TYPE_CHECKING
 
 from vllm.model_executor.guided_decoding import outlines_decoding
 from vllm.model_executor.guided_decoding.outlines_decoding import (
@@ -10,14 +11,14 @@ from vllm.model_executor.guided_decoding.outlines_decoding import (
     _get_logits_processor,
 )
 
-# ruff: noqa: TCH002
-from vllm.model_executor.guided_decoding.outlines_logits_processors import (
-    JSONLogitsProcessor,
-    RegexLogitsProcessor,
-)
-from vllm.transformers_utils.tokenizer import AnyTokenizer
-
 from vllm_tgis_adapter.grpc.pb.generation_pb2 import DecodingParameters
+
+if TYPE_CHECKING:
+    from vllm.model_executor.guided_decoding.outlines_logits_processors import (
+        JSONLogitsProcessor,
+        RegexLogitsProcessor,
+    )
+    from vllm.transformers_utils.tokenizer import AnyTokenizer
 
 
 async def get_outlines_guided_decoding_logits_processor(
