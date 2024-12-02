@@ -23,7 +23,6 @@ from vllm.tracing import (
     extract_trace_headers,
     log_tracing_disabled_warning,
 )
-from vllm.transformers_utils.tokenizer import AnyTokenizer  # noqa: TCH002
 from vllm.utils import iterate_with_cancellation
 
 from vllm_tgis_adapter.logging import init_logger
@@ -72,6 +71,7 @@ if TYPE_CHECKING:
         from vllm.engine.protocol import AsyncEngineClient as EngineClient
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
+    from vllm.transformers_utils.tokenizer import AnyTokenizer
 
     from .adapters import PromptAdapterRequest
     from .pb.generation_pb2 import (

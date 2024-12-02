@@ -108,10 +108,8 @@ def validate_params(  # noqa: C901
         TGISValidationError.MinNewTokens.error()
 
     if (
-        stopping.stop_sequences
-        and (len(stopping.stop_sequences) > MAX_STOP_SEQS)
-        or not all(0 < len(ss) <= MAX_STOP_SEQ_LENGTH for ss in stopping.stop_sequences)
-    ):
+        stopping.stop_sequences and (len(stopping.stop_sequences) > MAX_STOP_SEQS)
+    ) or not all(0 < len(ss) <= MAX_STOP_SEQ_LENGTH for ss in stopping.stop_sequences):
         TGISValidationError.StopSequences.error(MAX_STOP_SEQS, MAX_STOP_SEQ_LENGTH)
 
     # Response options validation
