@@ -53,7 +53,7 @@ convert_pt_to_prompt = "vllm_tgis_adapter.tgis_utils.convert_pt_to_prompt:cli"
 [project.optional-dependencies]
 tests = [
   "pytest==8.3.3",
-  "pytest-cov==5.0.0",
+  "pytest-cov==6.0.0",
   "pytest-mock==3.14.0",
   "pytest-asyncio==0.24.0",
   "requests==2.32.3"
