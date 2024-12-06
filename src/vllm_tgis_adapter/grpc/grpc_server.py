@@ -248,7 +248,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
             is_tracing_enabled = await self.engine.is_tracing_enabled()
             headers = dict(context.invocation_metadata())
-            logs.set_correlation_id(request_id_i, headers["x-correlation_id"])
+            logs.set_correlation_id(request_id_i, headers.get("x-correlation_id"))
             if is_tracing_enabled:
                 kwargs["trace_headers"] = extract_trace_headers(headers)
             elif contains_trace_headers(headers):
@@ -345,7 +345,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         elif contains_trace_headers(headers):
             log_tracing_disabled_warning()
         if "x-correlation-id" in headers:
-            logs.set_correlation_id(request_id, headers["x-correlation_id"])
+            logs.set_correlation_id(request_id, headers.get("x-correlation_id"))
 
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
