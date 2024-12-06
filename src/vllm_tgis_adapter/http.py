@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from vllm.entrypoints.launcher import serve_http
 from vllm.entrypoints.openai.api_server import build_app, init_app_state
 from vllm.logger import init_logger
 
+from vllm_tgis_adapter.tgis_utils import logs
+
 if TYPE_CHECKING:
     import argparse
 
+    from fastapi import Request, Response
     from vllm.engine.async_llm_engine import AsyncLLMEngine
     from vllm.engine.protocol import AsyncEngineClient
 
@@ -26,6 +29,22 @@ async def run_http_server(
     # allows passing of the engine
 
     app = build_app(args)
+
+    @app.middleware("http")
+    async def set_correlation_id(request: Request, call_next: Callable) -> Response:
+        # If a correlation ID header is set, then use it as the request ID
+        correlation_id = request.headers.get("X-Correlation-ID", None)
+        if correlation_id:
+            # NB: Setting a header here requires using byte arrays and lowercase
+            headers = dict(request.scope["headers"])
+            headers[b"x-request-id"] = correlation_id.encode()
+            request.scope["headers"] = list(headers.items())
+            # Tell the logger that the request ID is the correlation ID for this
+            # request
+            logs.set_correlation_id(correlation_id, correlation_id)
+
+        return await call_next(request)
+
     model_config = await engine.get_model_config()
     init_app_state(engine, model_config, app.state, args)
 
