@@ -121,22 +121,6 @@ async def _handle_exception(
         stop_event = args[0].stop_event
         stop_event.set()
 
-    # First just try to replicate the TGIS-style log messages
-    # for generate_* rpcs
-    if is_generate_fn:
-        if isinstance(e, AbortError):
-            # For things that we've already aborted, the relevant error
-            # string is already in the grpc context.
-            error_message = context.details()
-        else:
-            error_message = str(e)
-        request = kwargs.get("request") or args[-2]
-        logs.log_error(
-            request=request,
-            exception_str=error_message,
-            logger=logger,
-        )
-
     # AbortErrors likely correspond to things we've already explicitly handled,
     # So we only add special handling for other types of errors
     if not isinstance(e, AbortError):
@@ -256,6 +240,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             input_ids, max_is_token_limit[i] = await self._validate_prompt_and_tokenize(
                 sampling_params, truncate_input_tokens, req.text, tokenizer, context
             )
+            request_id_i = f"{request_id}-{i}"
 
             inputs = token_inputs(
                 prompt=req.text,
@@ -263,6 +248,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
             is_tracing_enabled = await self.engine.is_tracing_enabled()
             headers = dict(context.invocation_metadata())
+            logs.set_correlation_id(request_id_i, headers["x-correlation_id"])
             if is_tracing_enabled:
                 kwargs["trace_headers"] = extract_trace_headers(headers)
             elif contains_trace_headers(headers):
@@ -271,7 +257,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 self.engine.generate(
                     inputs=inputs,
                     sampling_params=sampling_params,
-                    request_id=f"{request_id}-{i}",
+                    request_id=request_id_i,
                     **kwargs,
                 ),
             )
@@ -316,15 +302,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             response = self._convert_input_details(
                 res, resp_options, sampling_params, response, tokenizer
             )
-            logs.log_response(
-                request=request,
-                response=response,
-                start_time=start_time,
-                engine_metrics=res.metrics,
-                sub_request_num=i,
-                logger=logger,
-                headers=headers,
-            )
             service_metrics.observe_generation_success(start_time=start_time)
             responses[i] = response
 
@@ -367,6 +344,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             kwargs["trace_headers"] = extract_trace_headers(headers)
         elif contains_trace_headers(headers):
             log_tracing_disabled_warning()
+        if "x-correlation-id" in headers:
+            logs.set_correlation_id(request_id, headers["x-correlation_id"])
+
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
             # re-tokenized when `prompt_token_ids` is supplied
@@ -389,9 +369,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         generated_token_count = 0
         time_limit_reached = False
         full_output = ""
-        last_engine_response = None
         async for result in result_generator:
-            last_engine_response = result
             # In chunked prefill case it's possible that there will be
             # multiple prompt-only outputs
             if first_response is None or (
@@ -455,16 +433,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         first_response.stop_reason = last_response.stop_reason
         first_response.stop_sequence = last_response.stop_sequence
         first_response.generated_token_count = last_response.generated_token_count
-        logs.log_response(
-            request=request,
-            response=first_response,
-            start_time=start_time,
-            engine_metrics=(
-                last_engine_response.metrics if last_engine_response else None
-            ),
-            logger=logger,
-            headers=headers,
-        )
         service_metrics.observe_generation_success(start_time=start_time)
 
     def _convert_input_details(
