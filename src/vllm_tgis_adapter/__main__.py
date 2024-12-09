@@ -15,6 +15,8 @@ from vllm.entrypoints.openai.api_server import (
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.utils import FlexibleArgumentParser
 
+from vllm_tgis_adapter.tgis_utils.logs import add_logging_wrappers
+
 from .grpc import run_grpc_server
 from .http import run_http_server
 from .logging import init_logger
@@ -32,6 +34,8 @@ async def start_servers(args: argparse.Namespace) -> None:
 
     tasks: list[asyncio.Task] = []
     async with build_async_engine_client(args) as engine:
+        add_logging_wrappers(engine)
+
         http_server_task = loop.create_task(
             run_http_server(args, engine),
             name="http_server",
