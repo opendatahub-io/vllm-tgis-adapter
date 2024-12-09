@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
     from vllm import PromptType, RequestOutput, SamplingParams
     from vllm.engine.protocol import EngineClient
+    from vllm.sequence import RequestMetrics
 
 logger = init_logger(__name__)
 
@@ -97,7 +98,7 @@ def add_logging_wrappers(engine: EngineClient) -> None:
         if last:
             # Log the response
             with suppress(BaseException):
-                _new_log_response(
+                _log_response(
                     request_id=request_id,
                     correlation_id=correlation_id,
                     response=last,
@@ -106,10 +107,6 @@ def add_logging_wrappers(engine: EngineClient) -> None:
                 )
 
     engine.generate = generate_with_logging
-
-
-if TYPE_CHECKING:
-    from vllm.sequence import RequestMetrics
 
 
 def _log_error(request_id: str, correlation_id: str, exception_str: str) -> None:
@@ -143,7 +140,7 @@ def _log_request(
     )
 
 
-def _new_log_response(
+def _log_response(
     request_id: str,
     correlation_id: str,
     response: RequestOutput,
