@@ -1,7 +1,13 @@
 """Implements the logging for all tgi_* metrics for compatibility with TGIS opsviz."""
 
 import time
-from enum import StrEnum, auto
+try:
+    # StrEnum is available in the standard library `enum` from Python 3.11 onwards
+    from enum import StrEnum, auto
+except:
+    # For Python versions < 3.11, StrEnum is not available in the standard library `enum`
+    from enum import auto
+    from strenum import StrEnum
 
 from prometheus_client import Counter, Gauge, Histogram
 from vllm import RequestOutput
