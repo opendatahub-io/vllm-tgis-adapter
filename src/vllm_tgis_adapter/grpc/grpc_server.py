@@ -62,12 +62,7 @@ if TYPE_CHECKING:
     from grpc.aio import ServicerContext
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
-
-    try:
-        from vllm.engine.protocol import EngineClient
-    except ImportError:
-        # fallback for versions <=v0.6.1.post2
-        from vllm.engine.protocol import AsyncEngineClient as EngineClient
+    from vllm.engine.protocol import EngineClient
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
     from vllm.transformers_utils.tokenizer import AnyTokenizer
