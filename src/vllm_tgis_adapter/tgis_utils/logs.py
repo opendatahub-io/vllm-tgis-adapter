@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import logging
 import time
@@ -86,6 +87,12 @@ def add_logging_wrappers(engine: EngineClient) -> None:
             async for response in old_generate_fn(*args, **kwargs):
                 last = response
                 yield response
+        except asyncio.CancelledError:
+            _log_cancellation(
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            raise
         except BaseException as e:
             # Log any error
             _log_error(
@@ -115,6 +122,14 @@ def _log_error(request_id: str, correlation_id: str, exception_str: str) -> None
         request_id,
         correlation_id,
         exception_str,
+    )
+
+
+def _log_cancellation(request_id: str, correlation_id: str) -> None:
+    logger.info(
+        "Request cancelled: request_id=%s correlation_id=%s",
+        request_id,
+        correlation_id,
     )
 
 

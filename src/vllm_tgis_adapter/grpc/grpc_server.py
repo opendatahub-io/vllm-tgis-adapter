@@ -23,7 +23,6 @@ from vllm.tracing import (
     extract_trace_headers,
     log_tracing_disabled_warning,
 )
-from vllm.utils import iterate_with_cancellation
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
@@ -262,11 +261,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 ),
             )
 
-        async def is_cancelled() -> bool:
-            return context.cancelled()
-
         result_generator: AsyncIterator[tuple[int, RequestOutput]] = (
-            merge_async_iterators(*generators, is_cancelled=is_cancelled)
+            merge_async_iterators(*generators)
         )
 
         resp_options = request.params.response
@@ -356,11 +352,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             **adapter_kwargs,
             **kwargs,
         )
-
-        async def is_cancelled() -> bool:
-            return context.cancelled()
-
-        result_generator = iterate_with_cancellation(result_generator, is_cancelled)
 
         resp_options = request.params.response
 
