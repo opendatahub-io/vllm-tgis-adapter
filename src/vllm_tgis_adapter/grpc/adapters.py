@@ -148,12 +148,10 @@ def _load_adapter_metadata(adapter_id: str, adapter_path: str, unique_id: int) -
     if (Path(adapter_path) / "decoder.pt").exists():
         # Create new temporary directory and convert to peft format there
         # NB: This requires write access to /tmp
-        # Intentionally setting delete=False, we need the new adapter
-        # files to exist for the life of the process
         logger.info("Converting caikit-style adapter %s to peft format", adapter_id)
-        temp_dir = tempfile.TemporaryDirectory(delete=False)
-        convert_pt_to_peft(adapter_path, temp_dir.name)
-        adapter_path = temp_dir.name
+        temp_dir = tempfile.mkdtemp()
+        convert_pt_to_peft(adapter_path, temp_dir)
+        adapter_path = temp_dir
 
     adapter_config_path = Path(adapter_path) / "adapter_config.json"
     if not Path(adapter_config_path).exists():
