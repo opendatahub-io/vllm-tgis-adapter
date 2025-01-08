@@ -49,7 +49,9 @@ class AdapterMetadata:
 class AdapterStore:
     cache_path: str  # Path to local store of adapters to load from
     adapters: dict[str, AdapterMetadata]
-    next_unique_id: int = 1
+    next_unique_id: int = (
+        262144  # Start at 2^18 to not run into vLLM's dynamic adapters
+    )
     load_locks: dict[str, asyncio.Lock] = dataclasses.field(default_factory=dict)
 
 
