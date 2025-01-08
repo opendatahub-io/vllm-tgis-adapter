@@ -94,7 +94,7 @@ jobs:
           VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
 
       - name: Upload coverage report
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         if: github.actor != 'dependabot[bot]'
         with:
           fail_ci_if_error: true
