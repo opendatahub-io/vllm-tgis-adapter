@@ -70,10 +70,10 @@ pre-commit install
 pre-commit run --all-files
 ```
 
-This project uses [`nox`](https://github.com/wntrblm/nox) to manage test automation:
+This project uses [`nox`](https://github.com/wntrblm/nox) to manage test automation and [`uv`](https://github.com/astral-sh/uv) for venv management:
 
 ```bash
-pip install nox
+pip install nox uv
 nox --list  # list available sessions
 nox -s tests-3.10 # run tests session for a specific python version
 nox -s build-3.11 # build the wheel package
@@ -88,8 +88,9 @@ The standard vllm built requires an Nvidia GPU. When this is not available, it i
 
 env \
     VLLM_CPU_DISABLE_AVX512=true VLLM_TARGET_DEVICE=cpu \
-    PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
-    pip install git+https://github.com/vllm-project/vllm
+    UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
+    UV_INDEX_STRATEGY=unsafe-best-match\
+    uv pip install git+https://github.com/vllm-project/vllm
 ```
 
-making it possible to run the tests on most hardware. Please note that the `pip` extra index url is required in order to install the torch CPU version.
+making it possible to run the tests on most hardware. Please note that the `uv` extra index url is required in order to install the torch CPU version.
