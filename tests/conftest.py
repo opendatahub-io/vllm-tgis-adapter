@@ -41,7 +41,7 @@ def prompt_tune_path():
 @pytest.fixture
 def lora_available() -> bool:
     # lora does not work on cpu
-    return not vllm.config.current_platform.is_cpu()
+    return not vllm.platforms.current_platform.is_cpu()
 
 
 @pytest.fixture
