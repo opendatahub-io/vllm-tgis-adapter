@@ -5,15 +5,21 @@ import nox
 
 nox.options.reuse_existing_virtualenvs = True
 nox.options.sessions = "lint", "tests"
+nox.options.default_venv_backend = "uv"
 locations = "src", "tests"
 
-versions = ["3.9", "3.10", "3.11", "3.12"]
+versions = [
+    "3.12",
+    "3.11",
+    "3.10",
+    "3.9",
+]
 
 
 @nox.session(python=versions)
 def tests(session: nox.Session) -> None:
     if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
-        session.install(vllm_version, "-v")
+        session.install(vllm_version)
 
     session.install(".[tests]")
 
@@ -21,6 +27,7 @@ def tests(session: nox.Session) -> None:
         "pytest",
         "--cov",
         "--cov-config=pyproject.toml",
+        "--no-cov-on-fail",
         *session.posargs,
         env={"COVERAGE_FILE": f".coverage.{session.python}"},
     )
@@ -58,8 +65,11 @@ def dev(session: nox.Session) -> None:
     venv_dir = Path(args[0])
 
     session.log(f"Setting up virtual environment in {venv_dir}")
-    session.install("virtualenv")
-    session.run("virtualenv", venv_dir, silent=True)
+    session.install("uv")
+    session.run("uv", "venv", venv_dir, silent=True)
 
     python = venv_dir / "bin/python"
-    session.run(python, "-m", "pip", "install", "-e", ".[dev]", external=True)
+    session.run(
+        *f"{python} -m uv pip install -e .[dev]".split(),
+        external=True,
+    )

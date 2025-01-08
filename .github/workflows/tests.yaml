@@ -14,8 +14,10 @@ env:
   # facilitate testing by building vLLM for CPU when needed
   VLLM_CPU_DISABLE_AVX512: "true"
   VLLM_TARGET_DEVICE: "cpu"
-  # prefer torch cpu version
-  PIP_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
+  # prefer index for torch cpu version
+  UV_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
+  # have uv match pip's behaviour for extra index operations
+  UV_INDEX_STRATEGY: "unsafe-best-match"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -56,19 +58,18 @@ jobs:
             ccache \
             libnuma-dev libdnnl-dev opencl-dev
 
-      - name: Set up Python ${{ matrix.pyv }}
-        uses: actions/setup-python@v5
-        id: setup-python
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v5
         with:
+          version: "latest"
           python-version: ${{ matrix.pyv }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
 
-      - name: Upgrade pip and nox
+      - name: Install nox
         run: |
-          python -m pip install --upgrade pip nox
-          pip --version
-          nox --version
+          uv pip install nox
 
       - name: nox envs cache
         id: cache
