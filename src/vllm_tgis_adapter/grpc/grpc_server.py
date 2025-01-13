@@ -87,6 +87,7 @@ ADD_SPECIAL_TOKENS: bool = os.getenv("ADD_SPECIAL_TOKENS", "true").lower() not i
     "0",
     "false",
 )
+CORRELATION_ID_HEADER = "x-correlation-id"
 
 
 def with_default(value: _T, default: _T) -> _T:
@@ -242,7 +243,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
             is_tracing_enabled = await self.engine.is_tracing_enabled()
             headers = dict(context.invocation_metadata())
-            logs.set_correlation_id(request_id_i, headers.get("x-correlation_id"))
+            logs.set_correlation_id(request_id_i, headers.get(CORRELATION_ID_HEADER))
             if is_tracing_enabled:
                 kwargs["trace_headers"] = extract_trace_headers(headers)
             elif contains_trace_headers(headers):
@@ -335,8 +336,8 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             kwargs["trace_headers"] = extract_trace_headers(headers)
         elif contains_trace_headers(headers):
             log_tracing_disabled_warning()
-        if "x-correlation-id" in headers:
-            logs.set_correlation_id(request_id, headers.get("x-correlation_id"))
+        if CORRELATION_ID_HEADER in headers:
+            logs.set_correlation_id(request_id, headers.get(CORRELATION_ID_HEADER))
 
         result_generator = self.engine.generate(
             # prompt is supplied for observability, the text is not
@@ -492,7 +493,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         if not metadata:
             return uuid.uuid4().hex
 
-        correlation_id = dict(metadata).get("x-correlation-id")
+        correlation_id = dict(metadata).get(CORRELATION_ID_HEADER)
 
         if not correlation_id:
             return uuid.uuid4().hex
