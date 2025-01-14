@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Callable
 
 from vllm.entrypoints.launcher import serve_http
@@ -46,7 +47,9 @@ async def run_http_server(
         return await call_next(request)
 
     model_config = await engine.get_model_config()
-    init_app_state(engine, model_config, app.state, args)
+    maybe_coroutine = init_app_state(engine, model_config, app.state, args)
+    if inspect.isawaitable(maybe_coroutine):
+        await maybe_coroutine
 
     serve_kwargs = {
         "host": args.host,
