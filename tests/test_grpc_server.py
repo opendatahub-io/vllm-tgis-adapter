@@ -69,19 +69,30 @@ def test_lora_request(grpc_client, lora_adapter_name):
 
 def test_request_id(grpc_client, mocker):
     from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService, uuid
+    from vllm_tgis_adapter.tgis_utils.logs import logger
 
-    spy = mocker.spy(TextGenerationService, "request_id")
+    request_id_spy = mocker.spy(TextGenerationService, "request_id")
+    # `caplog` doesn't appear to work here
+    # So we can instead spy directly on the logger from tgis_utils.logs
+    logger_spy = mocker.spy(logger, "info")
+
+    # Test that the request ID is set to `x-correlation-id` if supplied
     response = grpc_client.make_request(
         "The answer to life the universe and everything is ",
         metadata=[("x-correlation-id", "dummy-correlation-id")],
     )
     assert response.text
 
-    spy.assert_called_once()
-    assert spy.spy_return == "dummy-correlation-id"
+    request_id_spy.assert_called_once()
+    assert request_id_spy.spy_return == "dummy-correlation-id"
+    request_id_spy.reset_mock()
+    logger_spy.assert_called_once()
+    log_statement = logger_spy.call_args[0][0] % tuple(logger_spy.call_args[0][1:])
+    assert "correlation_id=dummy-correlation-id" in log_statement
+    logger_spy.reset_mock()
 
-    spy.reset_mock()
-
+    # Test that the request ID is set to a new uuid if `x-correlation-id` is not
+    # supplied
     request_id = uuid.uuid4()
     mocker.patch.object(uuid, "uuid4", return_value=request_id)
 
@@ -90,8 +101,12 @@ def test_request_id(grpc_client, mocker):
     )
     assert response.text
 
-    spy.assert_called_once()
-    assert spy.spy_return == request_id.hex
+    request_id_spy.assert_called_once()
+    assert request_id_spy.spy_return == request_id.hex
+    logger_spy.assert_called_once()
+    log_statement = logger_spy.call_args[0][0] % tuple(logger_spy.call_args[0][1:])
+    assert "correlation_id=None" in log_statement
+    logger_spy.reset_mock()
 
 
 def test_error_handling(mocker):
