@@ -29,8 +29,9 @@ logger = init_logger(__name__)
 _REQUEST_ID_TO_CORRELATION_ID = cachetools.TTLCache(maxsize=2048, ttl=600)
 
 
-def set_correlation_id(request_id: str, correlation_id: str) -> None:
-    _REQUEST_ID_TO_CORRELATION_ID[request_id] = correlation_id
+def set_correlation_id(request_id: str, correlation_id: str | None) -> None:
+    if correlation_id is not None:
+        _REQUEST_ID_TO_CORRELATION_ID[request_id] = correlation_id
 
 
 def get_correlation_id(request_id: str) -> str | None:
