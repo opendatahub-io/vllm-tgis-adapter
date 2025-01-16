@@ -44,7 +44,7 @@ class TGISValidationError(str, Enum):
     )
     PromptPrefix = "can't retrieve prompt prefix with id '{0}': {1}"
     SampleParametersGreedy = (
-        "sampling parameters aren't applicable in " "greedy decoding mode"
+        "sampling parameters aren't applicable in greedy decoding mode"
     )
 
     # Additions that are _not_ in TGIS
@@ -53,7 +53,7 @@ class TGISValidationError(str, Enum):
     AdaptersDisabled = "adapter_id supplied but no adapter store was configured"
     AdapterUnsupported = "adapter type {0} is not currently supported"
     InvalidAdapterID = (
-        "Invalid adapter id '{0}', must contain only " "alphanumeric, _ and - and /"
+        "Invalid adapter id '{0}', must contain only alphanumeric, _ and - and /"
     )
 
     def error(self, *args, **kwargs) -> typing.NoReturn:  # noqa: ANN002,ANN003

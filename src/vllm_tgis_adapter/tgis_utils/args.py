@@ -230,8 +230,7 @@ def postprocess_tgis_args(args: argparse.Namespace) -> argparse.Namespace:  # no
         )
     if args.max_concurrent_requests is not None:
         logger.warning(
-            "max_concurrent_requests is not supported by tgis-vllm and "
-            "will be ignored."
+            "max_concurrent_requests is not supported by tgis-vllm and will be ignored."
         )
 
     if args.tls_cert_path:
