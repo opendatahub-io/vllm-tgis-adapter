@@ -158,7 +158,6 @@ ignore = [
   "PTH123",  # open() should be replaced by Path.open
   "ANN204",  # missing  issing return type annotation for special method `__init__`
   "EM101",  # Exception must not use a string literal, assign to variable first
-  "ANN101",  # missing type annotation for `self` (deprecated, will be removed)
   "TRY003",  # Avoid specifying long messages outside the exception class
   "TD",  # todo messages
   "FIX",  # todo messages
@@ -185,6 +184,12 @@ select = ["ALL"]
   "D",  # docs
   "ANN",  # annotations
   "TRY003"  # long messages outside exception class
+]
+"src/vllm_tgis_adapter/http.py" = [
+  "A005"  # module shadows a Python standard-library module
+]
+"src/vllm_tgis_adapter/logging.py" = [
+  "A005"  # module shadows a Python standard-library module
 ]
 "examples/*" = [
   "T201",
