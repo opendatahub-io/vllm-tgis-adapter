@@ -86,7 +86,7 @@ async def test_adapters_are_cached():
 
     # Metadata is only fetched and cached once
     assert len(adapter_store.adapters) == 1
-    # Same unique ID is re-used for the second request
+    # Same unique ID is reused for the second request
     assert (
         adapters_1["lora_request"].lora_int_id == adapters_2["lora_request"].lora_int_id
     )
