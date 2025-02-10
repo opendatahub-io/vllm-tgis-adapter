@@ -27,7 +27,7 @@ requires-python = ">=3.9"
 dynamic = ["version"]
 dependencies = [
   "vllm>=0.6.4.post2",
-  "prometheus_client==0.21.0",
+  "prometheus_client==0.21.1",
   "grpcio==1.70.0",
   "grpcio-health-checking==1.70.0",
   "grpcio-reflection==1.70.0",
