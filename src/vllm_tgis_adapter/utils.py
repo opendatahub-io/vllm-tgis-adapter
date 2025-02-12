@@ -26,9 +26,9 @@ def write_termination_log(msg: str, file: str = "/dev/termination-log") -> None:
         # Ignore any errors writing to the termination logfile.
         # Users can fall back to the stdout logs, and we don't want to pollute
         # those with an error here.
-        from .logging import init_logger
+        from .logging import DEFAULT_LOGGER_NAME, init_logger
 
-        logger = init_logger("vllm-tgis-adapter")
+        logger = init_logger(DEFAULT_LOGGER_NAME)
         logger.exception("Unable to write termination logs to %s", file)
 
 
