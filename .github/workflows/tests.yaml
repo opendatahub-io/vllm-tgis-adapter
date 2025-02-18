@@ -67,6 +67,14 @@ jobs:
           cache-dependency-glob: |
             pyproject.toml
 
+      - name: Check for generated code changes
+        run: |
+          ./update_generation_pb2
+          if ! git diff; then
+            echo "The repository is not clean: run ./update_generation_pb2 and commit the changes in the generated code" >&2
+            exit 1
+          fi
+
       - name: Install nox
         run: |
           uv pip install nox

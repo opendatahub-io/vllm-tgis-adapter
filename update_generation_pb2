@@ -1,0 +1,23 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "grpcio-tools",
+#   "types-protobuf",
+#   "mypy-protobuf",
+# ]
+# ///
+import subprocess
+import sys
+
+update_generation_pb2_cmd = [
+    sys.executable,
+    "-m",
+    "grpc_tools.protoc",
+    "--proto_path=src",
+    "--python_out=src/",
+    "--grpc_python_out=src/",
+    "--mypy_out=src/",
+    "vllm_tgis_adapter/grpc/pb/generation.proto",
+]
+subprocess.call(update_generation_pb2_cmd)

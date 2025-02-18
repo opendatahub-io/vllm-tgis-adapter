@@ -52,6 +52,7 @@ def lint(session: nox.Session) -> None:
 def build(session: nox.Session) -> None:
     session.install("build", "setuptools", "twine")
 
+    session.run("python", "update_generation_pb2")
     session.run("python", "-m", "build")
 
     dists = Path("dist").glob("*")

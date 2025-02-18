@@ -1,11 +1,7 @@
 [build-system]
 requires = [
   "setuptools>=48",
-  "setuptools_scm[toml]>=6.3.1",
-  # protobuf-generation tools
-  "grpcio-tools==1.62.1",
-  "mypy-protobuf==3.6.0",
-  "types-protobuf>=3.20.4"
+  "setuptools_scm[toml]>=6.3.1"
 ]
 build-backend = "setuptools.build_meta"
 
@@ -138,7 +134,17 @@ ignore-words-list = " "
 output-format = "full"
 show-fixes = true
 
+[tool.ruff.format]
+exclude = [
+  "*.pyi",
+  "update_generation_pb2"
+]
+
 [tool.ruff.lint]
+exclude = [
+  "src/vllm_tgis_adapter/grpc/pb/generation_pb2.pyi",
+  "update_generation_pb2"
+]
 ignore = [
   "S101",  # assert
   "PLR2004",  # magic-value-comparison
