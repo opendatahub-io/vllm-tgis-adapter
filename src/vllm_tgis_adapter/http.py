@@ -63,7 +63,7 @@ async def run_http_server(
     }
     serve_kwargs.update(uvicorn_kwargs)
 
-    shutdown_coro = await serve_http(app, **serve_kwargs)
+    shutdown_coro = await serve_http(app, sock=None, **serve_kwargs)
 
     # launcher.serve_http returns a shutdown coroutine to await
     # (The double await is intentional)
