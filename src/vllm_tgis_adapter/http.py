@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import argparse
     import socket
 
-    from fastapi import Request, Response
+    from fastapi import FastAPI, Request, Response
     from vllm.engine.async_llm_engine import AsyncLLMEngine
     from vllm.engine.protocol import AsyncEngineClient
 
@@ -22,16 +22,25 @@ TIMEOUT_KEEP_ALIVE = 5  # seconds
 logger = init_logger(__name__)
 
 
+def build_http_server(
+    args: argparse.Namespace,
+) -> FastAPI:
+    # builds the vllm api server so we can pass reference to it
+    # within the tgis adapter
+
+    app = build_app(args)
+    return app
+
+
 async def run_http_server(
     args: argparse.Namespace,
+    app: FastAPI,
     engine: AsyncLLMEngine | AsyncEngineClient,
     sock: socket.socket | None = None,
     **uvicorn_kwargs,  # noqa: ANN003
 ) -> None:
     # modified copy of vllm.entrypoints.openai.api_server.run_server that
     # allows passing of the engine
-
-    app = build_app(args)
 
     @app.middleware("http")
     async def set_correlation_id(request: Request, call_next: Callable) -> Response:

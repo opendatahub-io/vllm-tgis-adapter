@@ -74,7 +74,7 @@ async def test_lora_adapter():
 
 @pytest.mark.asyncio
 async def test_adapters_are_cached():
-    adapter_name = "granite-3b-code-instruct-lora"
+    adapter_name = "bloomz-560m-prompt-adapter"
     request = BatchedGenerationRequest(
         adapter_id=adapter_name,
     )
@@ -88,15 +88,32 @@ async def test_adapters_are_cached():
     assert len(adapter_store.adapters) == 1
     # Same unique ID is reused for the second request
     assert (
-        adapters_1["lora_request"].lora_int_id == adapters_2["lora_request"].lora_int_id
+        adapters_1["prompt_adapter_request"].prompt_adapter_id
+        == adapters_2["prompt_adapter_request"].prompt_adapter_id
     )
+
+
+@pytest.mark.asyncio
+async def test_lora_adapters_are_not_cached():
+    adapter_name = "granite-3b-code-instruct-lora"
+    request = BatchedGenerationRequest(
+        adapter_id=adapter_name,
+    )
+
+    adapter_store = AdapterStore(cache_path=FIXTURES_DIR, adapters={})
+
+    await validate_adapters(request, adapter_store=adapter_store)
+    await validate_adapters(request, adapter_store=adapter_store)
+
+    # Metadata isn't cached in our cache
+    assert len(adapter_store.adapters) == 0
 
 
 @pytest.mark.asyncio
 async def test_store_handles_multiple_adapters():
     adapter_store = AdapterStore(cache_path=FIXTURES_DIR, adapters={})
 
-    adapter_name = "granite-3b-code-instruct-lora"
+    adapter_name = "bloom_sentiment_1"
     request = BatchedGenerationRequest(
         adapter_id=adapter_name,
     )
@@ -110,7 +127,7 @@ async def test_store_handles_multiple_adapters():
 
     assert len(adapter_store.adapters) == 2
     assert (
-        adapters_1["lora_request"].lora_int_id
+        adapters_1["prompt_adapter_request"].prompt_adapter_id
         < adapters_2["prompt_adapter_request"].prompt_adapter_id
     )
 
