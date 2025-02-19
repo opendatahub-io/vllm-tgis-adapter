@@ -160,7 +160,9 @@ def add_tgis_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--disable-prompt-logprobs", type=_bool_from_string, default=False
     )
     parser.add_argument(
-        "--vllm-log-filter-patterns", type=str, default='["GuidedDecodingParams([^)]*)"]'
+        "--vllm-log-filter-patterns",
+        type=str,
+        default='["GuidedDecodingParams([^)]*)"]',
     )
 
     # TODO check/add other args here
