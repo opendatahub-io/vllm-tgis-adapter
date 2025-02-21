@@ -11,6 +11,7 @@ import uvloop
 import vllm
 from vllm.entrypoints.openai.api_server import (
     build_async_engine_client,
+    create_server_socket,
 )
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.utils import FlexibleArgumentParser
@@ -32,12 +33,18 @@ logger = init_logger(DEFAULT_LOGGER_NAME)
 async def start_servers(args: argparse.Namespace) -> None:
     loop = asyncio.get_running_loop()
 
+    # workaround to make sure that we bind the port before the engine is set up.
+    # This avoids race conditions with ray.
+    # see https://github.com/vllm-project/vllm/issues/8204
+    sock_addr = (args.host or "", args.port)
+    sock = create_server_socket(sock_addr)
+
     tasks: list[asyncio.Task] = []
     async with build_async_engine_client(args) as engine:
         add_logging_wrappers(engine)
 
         http_server_task = loop.create_task(
-            run_http_server(args, engine),
+            run_http_server(args, engine, sock),
             name="http_server",
         )
         # The http server task will catch interrupt signals for us
