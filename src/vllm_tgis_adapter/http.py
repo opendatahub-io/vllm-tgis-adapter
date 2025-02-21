@@ -11,6 +11,7 @@ from vllm_tgis_adapter.tgis_utils import logs
 
 if TYPE_CHECKING:
     import argparse
+    import socket
 
     from fastapi import Request, Response
     from vllm.engine.async_llm_engine import AsyncLLMEngine
@@ -24,6 +25,7 @@ logger = init_logger(__name__)
 async def run_http_server(
     args: argparse.Namespace,
     engine: AsyncLLMEngine | AsyncEngineClient,
+    sock: socket.socket | None = None,
     **uvicorn_kwargs,  # noqa: ANN003
 ) -> None:
     # modified copy of vllm.entrypoints.openai.api_server.run_server that
@@ -62,6 +64,10 @@ async def run_http_server(
         "ssl_cert_reqs": args.ssl_cert_reqs,
     }
     serve_kwargs.update(uvicorn_kwargs)
+
+    # should only be used in versions of vllm >= 0.7.3
+    if "sock" in inspect.getfullargspec(serve_http).args:
+        serve_kwargs["sock"] = sock
 
     shutdown_coro = await serve_http(app, **serve_kwargs)
 
