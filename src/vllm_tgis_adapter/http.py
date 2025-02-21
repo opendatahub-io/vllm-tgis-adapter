@@ -63,7 +63,12 @@ async def run_http_server(
     }
     serve_kwargs.update(uvicorn_kwargs)
 
-    shutdown_coro = await serve_http(app, sock=None, **serve_kwargs)
+    from vllm.version import __version_tuple__ as vllm_version_tuple
+    ...
+    if vllm_version_tuple >= (0, 7, 3):
+        serve_kargs['sock'] = None
+        
+    shutdown_coro = await serve_http(app, **serve_kwargs)
 
     # launcher.serve_http returns a shutdown coroutine to await
     # (The double await is intentional)
