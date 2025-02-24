@@ -107,7 +107,10 @@ async def validate_adapters(
             )
 
             # Add to cache
-            adapter_store.adapters[adapter_id] = adapter_metadata
+            # We don't cache LoRA requests because the vllm api server
+            # maintains its own cache
+            if adapter_metadata.adapter_type != "LORA":
+                adapter_store.adapters[adapter_id] = adapter_metadata
 
     # Build the proper vllm request object
     if adapter_metadata.adapter_type == "LORA":
