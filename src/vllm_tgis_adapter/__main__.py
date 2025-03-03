@@ -19,7 +19,7 @@ from vllm.utils import FlexibleArgumentParser
 from vllm_tgis_adapter.tgis_utils.logs import add_logging_wrappers
 
 from .grpc import run_grpc_server
-from .http import run_http_server
+from .http import build_http_server, run_http_server
 from .logging import DEFAULT_LOGGER_NAME, init_logger
 from .tgis_utils.args import EnvVarArgumentParser, add_tgis_args, postprocess_tgis_args
 from .utils import check_for_failed_tasks, write_termination_log
@@ -43,15 +43,16 @@ async def start_servers(args: argparse.Namespace) -> None:
     async with build_async_engine_client(args) as engine:
         add_logging_wrappers(engine)
 
+        vllm_server = await build_http_server(args, engine)
         http_server_task = loop.create_task(
-            run_http_server(args, engine, sock),
+            run_http_server(args, vllm_server, sock),
             name="http_server",
         )
         # The http server task will catch interrupt signals for us
         tasks.append(http_server_task)
 
         grpc_server_task = loop.create_task(
-            run_grpc_server(args, engine),
+            run_grpc_server(args, engine, vllm_server),
             name="grpc_server",
         )
         tasks.append(grpc_server_task)

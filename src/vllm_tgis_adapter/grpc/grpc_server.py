@@ -59,10 +59,12 @@ if TYPE_CHECKING:
     import argparse
     from collections.abc import AsyncIterator, MutableSequence
 
+    from fastapi import FastAPI
     from grpc.aio import ServicerContext
     from vllm import CompletionOutput, RequestOutput
     from vllm.config import ModelConfig
     from vllm.engine.protocol import EngineClient
+    from vllm.entrypoints.openai.serving_models import OpenAIServingModels
     from vllm.lora.request import LoRARequest
     from vllm.sequence import Logprob
     from vllm.transformers_utils.tokenizer import AnyTokenizer
@@ -167,9 +169,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         args: argparse.Namespace,
         health_servicer: health.HealthServicer,
         stop_event: asyncio.Event,
+        vllm_server: FastAPI,
     ):
         self.engine: EngineClient = engine
         self.stop_event = stop_event
+        self.vllm_server = vllm_server
 
         # This is set in post_init()
         self.config: ModelConfig | None = None
@@ -218,7 +222,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
-        kwargs = await self._validate_adapters(request, context)
+        kwargs = await self._validate_adapters(
+            request,
+            context,
+            self.vllm_server.state.openai_serving_models,
+        )
         tokenizer = await self._get_tokenizer(kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
@@ -308,7 +316,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         start_time = time.time()
         service_metrics.count_generate_request()
         request_id = self.request_id(context)
-        adapter_kwargs = await self._validate_adapters(request, context)
+        adapter_kwargs = await self._validate_adapters(
+            request,
+            context,
+            self.vllm_server.state.openai_serving_models,
+        )
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         sampling_params, deadline = await self._validate_and_convert_params(
@@ -628,10 +640,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         | BatchedGenerationRequest
         | BatchedTokenizeRequest,
         context: ServicerContext,
+        vllm_model_handler: OpenAIServingModels,
     ) -> dict[str, LoRARequest | PromptAdapterRequest]:
         try:
             adapters = await validate_adapters(
-                request=request, adapter_store=self.adapter_store
+                request=request,
+                adapter_store=self.adapter_store,
+                vllm_model_handler=vllm_model_handler,
             )
         except ValueError as e:
             service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
@@ -812,7 +827,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         service_metrics.count_tokenization_request(request)
 
         # TODO simplify to only check for lora adapter
-        adapter_kwargs = await self._validate_adapters(request, context)
+        adapter_kwargs = await self._validate_adapters(
+            request,
+            context,
+            self.vllm_server.state.openai_serving_models,
+        )
         tokenizer = await self._get_tokenizer(adapter_kwargs)
 
         responses: list[TokenizeResponse] = []
@@ -886,13 +905,20 @@ async def start_grpc_server(
     args: argparse.Namespace,
     engine: EngineClient,
     stop_event: asyncio.Event,
+    vllm_server: FastAPI,
 ) -> aio.Server:
     server = aio.server()
 
     health_servicer = health.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
 
-    generation = TextGenerationService(engine, args, health_servicer, stop_event)
+    generation = TextGenerationService(
+        engine,
+        args,
+        health_servicer,
+        stop_event,
+        vllm_server,
+    )
     await generation.post_init()
     generation_pb2_grpc.add_GenerationServiceServicer_to_server(generation, server)
 
@@ -951,9 +977,10 @@ async def start_grpc_server(
 async def run_grpc_server(
     args: argparse.Namespace,
     engine: EngineClient,
+    vllm_server: FastAPI,
 ) -> None:
     stop_event = asyncio.Event()
-    server = await start_grpc_server(args, engine, stop_event)
+    server = await start_grpc_server(args, engine, stop_event, vllm_server)
 
     # Add a task to watch for the stop event, so that the server can kill
     # itself from within its own handlers

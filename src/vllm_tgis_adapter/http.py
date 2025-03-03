@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import argparse
     import socket
 
-    from fastapi import Request, Response
+    from fastapi import FastAPI, Request, Response
     from vllm.engine.async_llm_engine import AsyncLLMEngine
     from vllm.engine.protocol import AsyncEngineClient
 
@@ -22,14 +22,12 @@ TIMEOUT_KEEP_ALIVE = 5  # seconds
 logger = init_logger(__name__)
 
 
-async def run_http_server(
+async def build_http_server(
     args: argparse.Namespace,
     engine: AsyncLLMEngine | AsyncEngineClient,
-    sock: socket.socket | None = None,
-    **uvicorn_kwargs,  # noqa: ANN003
-) -> None:
-    # modified copy of vllm.entrypoints.openai.api_server.run_server that
-    # allows passing of the engine
+) -> FastAPI:
+    # builds the vllm api server so we can pass reference to it
+    # within the tgis adapter
 
     app = build_app(args)
 
@@ -52,6 +50,18 @@ async def run_http_server(
     maybe_coroutine = init_app_state(engine, model_config, app.state, args)
     if inspect.isawaitable(maybe_coroutine):
         await maybe_coroutine
+
+    return app
+
+
+async def run_http_server(
+    args: argparse.Namespace,
+    app: FastAPI,
+    sock: socket.socket | None = None,
+    **uvicorn_kwargs,  # noqa: ANN003
+) -> None:
+    # modified copy of vllm.entrypoints.openai.api_server.run_server that
+    # allows passing of the engine
 
     serve_kwargs = {
         "host": args.host,

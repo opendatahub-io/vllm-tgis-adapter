@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vllm.lora.request import LoRARequest
+from vllm.entrypoints.openai.protocol import ErrorResponse
 from vllm.prompt_adapter.request import PromptAdapterRequest
 
 from vllm_tgis_adapter.logging import init_logger
@@ -23,12 +23,21 @@ from vllm_tgis_adapter.tgis_utils.convert_pt_to_prompt import convert_pt_to_peft
 
 from .validation import TGISValidationError
 
+try:
+    from vllm.entrypoints.openai.protocol import LoadLoRAAdapterRequest
+except ImportError:
+    from vllm.entrypoints.openai.protocol import (
+        LoadLoraAdapterRequest as LoadLoRAAdapterRequest,
+    )
+
 if TYPE_CHECKING:
     from vllm.entrypoints.grpc.pb.generation_pb2 import (
         BatchedGenerationRequest,
         BatchedTokenizeRequest,
         SingleGenerationRequest,
     )
+    from vllm.entrypoints.openai.serving_models import OpenAIServingModels
+    from vllm.lora.request import LoRARequest
 
 global_thread_pool = None  # used for loading adapter files from disk
 
@@ -49,7 +58,8 @@ class AdapterMetadata:
 class AdapterStore:
     cache_path: str  # Path to local store of adapters to load from
     adapters: dict[str, AdapterMetadata]
-    next_unique_id: int = 1
+    # Pick a large number to avoid colliding with vllm's adapter IDs
+    next_unique_id: int = 1000001
     load_locks: dict[str, asyncio.Lock] = dataclasses.field(default_factory=dict)
 
 
@@ -58,6 +68,7 @@ async def validate_adapters(
     | BatchedGenerationRequest
     | BatchedTokenizeRequest,
     adapter_store: AdapterStore | None,
+    vllm_model_handler: OpenAIServingModels,
 ) -> dict[str, LoRARequest | PromptAdapterRequest]:
     """Validate the adapters.
 
@@ -81,6 +92,12 @@ async def validate_adapters(
 
     # Guard against concurrent access for the same adapter
     async with adapter_store.load_locks.setdefault(adapter_id, asyncio.Lock()):
+        # Check VLLM server lora cache if this request matches an existing
+        # LoRA adapter
+        for existing_lora_request in vllm_model_handler.lora_requests:
+            if existing_lora_request.lora_name == adapter_id:
+                return {"lora_request": existing_lora_request}
+
         # If not already cached, we need to validate that files exist and
         # grab the type out of the adapter_config.json file
         if (adapter_metadata := adapter_store.adapters.get(adapter_id)) is None:
@@ -107,16 +124,19 @@ async def validate_adapters(
             )
 
             # Add to cache
+            # Query vllm's cache for lora requests
+            if adapter_metadata.adapter_type == "LORA":
+                lora_request = await _load_lora_adapter(
+                    request,
+                    adapter_id,
+                    adapter_metadata,
+                    vllm_model_handler,
+                )
+                return {"lora_request": lora_request}
+            # Use our cache for everything else
             adapter_store.adapters[adapter_id] = adapter_metadata
 
     # Build the proper vllm request object
-    if adapter_metadata.adapter_type == "LORA":
-        lora_request = LoRARequest(
-            lora_name=adapter_id,
-            lora_int_id=adapter_metadata.unique_id,
-            lora_path=adapter_metadata.full_path,
-        )
-        return {"lora_request": lora_request}
     if adapter_metadata.adapter_type == "PROMPT_TUNING":
         prompt_adapter_request = PromptAdapterRequest(
             prompt_adapter_id=adapter_metadata.unique_id,
@@ -126,10 +146,34 @@ async def validate_adapters(
                 "num_virtual_tokens", 0
             ),
         )
-        return {"prompt_adapter_request": prompt_adapter_request}
+    return {"prompt_adapter_request": prompt_adapter_request}
 
     # All other types unsupported
     TGISValidationError.AdapterUnsupported.error(adapter_metadata.adapter_type)  # noqa: RET503
+
+
+async def _load_lora_adapter(
+    request: SingleGenerationRequest
+    | BatchedGenerationRequest
+    | BatchedTokenizeRequest,
+    adapter_id: str,
+    adapter_metadata: AdapterMetadata,
+    vllm_model_handler: OpenAIServingModels,
+) -> LoRARequest:
+    load_request = LoadLoRAAdapterRequest(
+        lora_path=adapter_metadata.full_path,
+        lora_name=adapter_id,
+    )
+    load_result = await vllm_model_handler.load_lora_adapter(
+        request=load_request,
+        base_model_name=request.model_id,
+    )
+    if isinstance(load_result, ErrorResponse):
+        raise ValueError(load_result.message)  ## noqa: TRY004
+    for existing_lora_request in vllm_model_handler.lora_requests:
+        if existing_lora_request.lora_name == adapter_id:
+            return existing_lora_request
+    raise RuntimeError("vllm server failed to load LoRA adapter")
 
 
 def _load_adapter_metadata(adapter_id: str, adapter_path: str, unique_id: int) -> dict:
