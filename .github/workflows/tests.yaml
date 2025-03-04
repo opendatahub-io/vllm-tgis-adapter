@@ -80,6 +80,8 @@ jobs:
 
       - name: Lint code and check dependencies
         run: nox --envdir ~/.nox --reuse-venv=yes -v -s lint-${{ matrix.pyv }}
+        env:
+          RUFF_OUTPUT_FORMAT: github
 
       - name: Cache ccache cache directory
         id: cache-ccache
