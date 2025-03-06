@@ -134,6 +134,22 @@ def _log_cancellation(request_id: str, correlation_id: str) -> None:
     )
 
 
+def _sanitize_sampling_params(params: SamplingParams) -> str:
+    """Sanitize sampling parameters for logging."""
+    original_params = str(params)
+
+    if params.guided_decoding is not None:
+        # Redact guided decoding params
+        guided_decoding_params = str(params.guided_decoding)
+        sanitized_params = original_params.replace(
+            guided_decoding_params,
+            "(...)",
+        )
+        return sanitized_params
+
+    return original_params
+
+
 def _log_request(
     request_id: str,
     params: SamplingParams,
@@ -145,6 +161,9 @@ def _log_request(
         input_tokens = f" input_tokens={len(prompt['prompt_token_ids'])},"
     else:
         input_tokens = ""
+
+    sanitized_params = _sanitize_sampling_params(params)
+
     logger.info(
         "Processing request: {request_id=%s, correlation_id=%s, adapter_id=%s, "
         "%sparams=%s}",
@@ -152,7 +171,7 @@ def _log_request(
         correlation_id,
         adapter_id,
         input_tokens,
-        params,
+        sanitized_params,
     )
 
 
