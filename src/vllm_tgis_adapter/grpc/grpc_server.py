@@ -844,9 +844,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                     raise ValueError(
                         f"{type(tokenizer)} doesn't support the return_offsets option"
                     )
-                token_ids = tokenizer.encode(
-                    prompt=req.text,
-                )
+                token_ids = tokenizer.encode(req.text)
             else:
                 batch_encoding = tokenizer.encode_plus(
                     text=req.text,
