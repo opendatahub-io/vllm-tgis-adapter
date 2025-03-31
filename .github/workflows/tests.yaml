@@ -78,6 +78,13 @@ jobs:
           path: /home/runner/.nox
           key: ${{ runner.os }}-python-${{matrix.pyv}}-${{ hashFiles('noxfile.py') }}-${{matrix.vllm_version}}
 
+      - name: hf hub cache
+        id: hf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: ${{ runner.os }}
+
       - name: Lint code and check dependencies
         run: nox --envdir ~/.nox --reuse-venv=yes -v -s lint-${{ matrix.pyv }}
         env:
