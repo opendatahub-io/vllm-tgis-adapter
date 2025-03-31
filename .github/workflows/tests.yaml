@@ -18,6 +18,7 @@ env:
   UV_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
   # have uv match pip's behaviour for extra index operations
   UV_INDEX_STRATEGY: "unsafe-best-match"
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: 1
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
