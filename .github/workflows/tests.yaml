@@ -67,6 +67,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
+          cache-suffix: ${{matrix.vllm_version}}
 
       - name: Install nox
         run: |
