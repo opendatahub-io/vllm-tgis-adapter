@@ -14,7 +14,6 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
-from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.multiprocessing import MQEngineDeadError
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TokensPrompt, token_inputs
@@ -33,11 +32,6 @@ from vllm_tgis_adapter.tgis_utils.guided_decoding import (
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
     ExpDecayLengthPenaltyWarper,
     TypicalLogitsWarperWrapper,
-)
-from vllm_tgis_adapter.tgis_utils.metrics import (
-    FailureReasonLabel,
-    ServiceMetrics,
-    TGISStatLogger,
 )
 from vllm_tgis_adapter.utils import to_list
 
@@ -84,7 +78,6 @@ _T = TypeVar("_T")
 _F = TypeVar("_F", Callable, Coroutine)
 
 logger = init_logger(__name__)
-service_metrics = ServiceMetrics()
 
 ADD_SPECIAL_TOKENS: bool = os.getenv("ADD_SPECIAL_TOKENS", "true").lower() not in (
     "0",
@@ -110,8 +103,6 @@ async def _handle_exception(
     **kwargs: dict[str, Any],
 ) -> None:
     context: ServicerContext = kwargs.get("context") or args[-1]
-    is_generate_fn = "generate" in func.__name__.lower()
-
     # self.engine on the servicer
     engine = args[0].engine
     # If the engine has died, then the server cannot process any further
@@ -132,13 +123,8 @@ async def _handle_exception(
 
         if isinstance(e, OutOfMemoryError):
             logger.exception("%s caused GPU OOM error", func.__name__)
-            service_metrics.count_request_failure(FailureReasonLabel.OOM)
             await context.abort(StatusCode.RESOURCE_EXHAUSTED, str(e))
-        elif is_generate_fn:
-            service_metrics.count_request_failure(FailureReasonLabel.GENERATE)
-        else:
-            service_metrics.count_request_failure(FailureReasonLabel.UNKNOWN)
-        if isinstance(e, MQEngineDeadError):
+        elif isinstance(e, MQEngineDeadError):
             logger.error(e)
             return
         logger.exception("%s failed", func.__name__)
@@ -201,20 +187,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
     async def post_init(self) -> None:
         self.config = await self.engine.get_model_config()
-
-        if not isinstance(self.engine, AsyncLLMEngine):
-            logger.warning(
-                "TGIS Metrics currently disabled in decoupled front-end mode, "
-                "set DISABLE_FRONTEND_MULTIPROCESSING=True to enable"
-            )
-        else:
-            # Swap in the special TGIS stats logger
-            tgis_stats_logger = TGISStatLogger(
-                vllm_stat_logger=self.engine.engine.stat_loggers["prometheus"],
-                max_sequence_len=self.config.max_model_len,
-            )
-            self.engine.engine.stat_loggers["prometheus"] = tgis_stats_logger
-
         self.health_servicer.set(
             self.SERVICE_NAME,
             health_pb2.HealthCheckResponse.SERVING,
@@ -248,8 +220,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         request: BatchedGenerationRequest,
         context: ServicerContext,
     ) -> BatchedGenerationResponse:
-        start_time = time.time()
-        service_metrics.count_generate_request(len(request.requests))
         request_id = self.request_id(context)
         kwargs = await self._validate_adapters(
             request,
@@ -302,7 +272,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             if res.prompt is None:
                 res.prompt = request.requests[i].text
             responses[i] = res
-            service_metrics.observe_queue_time(res)
 
             if (
                 deadline is not None
@@ -328,19 +297,16 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             response = self._convert_input_details(
                 res, resp_options, sampling_params, response, tokenizer
             )
-            service_metrics.observe_generation_success(start_time=start_time)
             responses[i] = response
 
         return BatchedGenerationResponse(responses=responses)
 
     @log_rpc_handler_errors
-    async def GenerateStream(  # noqa: PLR0915, C901
+    async def GenerateStream(  # noqa: C901
         self,
         request: SingleGenerationRequest,
         context: ServicerContext,
     ) -> AsyncIterator[GenerationResponse]:
-        start_time = time.time()
-        service_metrics.count_generate_request()
         request_id = self.request_id(context)
         adapter_kwargs = await self._validate_adapters(
             request,
@@ -395,9 +361,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             if first_response is None or (
                 result.prompt_token_ids and not generated_token_count
             ):
-                if first_response is None:
-                    service_metrics.observe_queue_time(result)
-
                 if result.prompt is None:
                     result.prompt = request.request.text
 
@@ -453,7 +416,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         first_response.stop_reason = last_response.stop_reason
         first_response.stop_sequence = last_response.stop_sequence
         first_response.generated_token_count = last_response.generated_token_count
-        service_metrics.observe_generation_success(start_time=start_time)
 
     def _convert_input_details(
         self,
@@ -544,7 +506,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         try:
             validate_params(params, self.max_max_new_tokens)
         except ValueError as tgis_validation_error:
-            service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(tgis_validation_error))
 
         resp_options = params.response
@@ -650,7 +611,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         except ValueError as vllm_validation_error:
             # There may be validation cases caught by vLLM that are not covered
             # by the TGIS api validation
-            service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(vllm_validation_error))
 
         return sampling_params, deadline
@@ -670,7 +630,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 vllm_model_handler=vllm_model_handler,
             )
         except ValueError as e:
-            service_metrics.count_request_failure(FailureReasonLabel.VALIDATION)
             await context.abort(StatusCode.INVALID_ARGUMENT, str(e))
         return adapters
 
@@ -844,9 +803,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 tokenized results.
 
         """
-        # Log the incoming tokenization request for metrics
-        service_metrics.count_tokenization_request(request)
-
         # TODO simplify to only check for lora adapter
         adapter_kwargs = await self._validate_adapters(
             request,
@@ -903,7 +859,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
 
         response = BatchedTokenizeResponse(responses=responses)
-        service_metrics.observe_tokenization_response(response)
         return response
 
     @log_rpc_handler_errors
