@@ -6,6 +6,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable, Coroutine
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import grpc
@@ -16,7 +17,7 @@ from grpc_reflection.v1alpha import reflection
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.multiprocessing import MQEngineDeadError
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
-from vllm.inputs import token_inputs
+from vllm.inputs import TokensPrompt, token_inputs
 from vllm.sampling_params import RequestOutputKind, SamplingParams
 from vllm.tracing import (
     contains_trace_headers,
@@ -94,6 +95,12 @@ CORRELATION_ID_HEADER = "x-correlation-id"
 
 def with_default(value: _T, default: _T) -> _T:
     return value if value else default
+
+
+@lru_cache
+def _has_argument(generate_func: _F, arg_name: str) -> bool:
+    signature = inspect.signature(generate_func)
+    return arg_name in signature.parameters
 
 
 async def _handle_exception(
@@ -213,6 +220,28 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             health_pb2.HealthCheckResponse.SERVING,
         )
 
+    def _make_generator(
+        self,
+        prompt: str,
+        prompt_token_ids: list[int],
+        **kwargs: dict[str, Any],
+    ) -> _F:
+        # V1 removed inputs in favor of prompt
+        if _has_argument(self.engine.generate, "inputs"):
+            prompt_kwarg = {
+                "inputs": token_inputs(
+                    prompt=prompt,
+                    prompt_token_ids=prompt_token_ids,
+                )
+            }
+        else:
+            prompt_kwarg = {"prompt": TokensPrompt(prompt_token_ids=prompt_token_ids)}
+
+        return self.engine.generate(
+            **prompt_kwarg,
+            **kwargs,
+        )
+
     @log_rpc_handler_errors
     async def Generate(
         self,
@@ -245,10 +274,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
             request_id_i = f"{request_id}-{i}"
 
-            inputs = token_inputs(
-                prompt=req.text,
-                prompt_token_ids=input_ids,
-            )
             is_tracing_enabled = await self.engine.is_tracing_enabled()
             headers = dict(context.invocation_metadata())
             logs.set_correlation_id(request_id_i, headers.get(CORRELATION_ID_HEADER))
@@ -257,12 +282,13 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             elif contains_trace_headers(headers):
                 log_tracing_disabled_warning()
             generators.append(
-                self.engine.generate(
-                    inputs=inputs,
+                self._make_generator(
+                    prompt=req.text,
+                    prompt_token_ids=input_ids,
                     sampling_params=sampling_params,
                     request_id=request_id_i,
                     **kwargs,
-                ),
+                )
             )
 
         result_generator: AsyncIterator[tuple[int, RequestOutput]] = (
@@ -337,10 +363,6 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             context,
         )
 
-        inputs = token_inputs(
-            prompt=request.request.text,
-            prompt_token_ids=input_ids,
-        )
         kwargs = {}
         is_tracing_enabled = await self.engine.is_tracing_enabled()
         headers = dict(context.invocation_metadata())
@@ -351,10 +373,9 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         if CORRELATION_ID_HEADER in headers:
             logs.set_correlation_id(request_id, headers.get(CORRELATION_ID_HEADER))
 
-        result_generator = self.engine.generate(
-            # prompt is supplied for observability, the text is not
-            # re-tokenized when `prompt_token_ids` is supplied
-            inputs=inputs,
+        result_generator = self._make_generator(
+            prompt=request.request.text,
+            prompt_token_ids=input_ids,
             sampling_params=sampling_params,
             request_id=request_id,
             **adapter_kwargs,
@@ -619,7 +640,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 min_tokens=min_new_tokens,
                 repetition_penalty=with_default(decoding.repetition_penalty, 1.0),
                 logits_processors=logits_processors,
-                stop=with_default(stopping.stop_sequences, None),
+                stop=with_default(list(stopping.stop_sequences), None),
                 include_stop_str_in_output=stopping.include_stop_sequence
                 if stopping.HasField("include_stop_sequence")
                 else self.default_include_stop_seqs,
