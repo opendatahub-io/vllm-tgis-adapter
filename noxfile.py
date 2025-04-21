@@ -23,6 +23,11 @@ def tests(session: nox.Session) -> None:
 
     session.install(".[tests]")
 
+    # Re-install without dependencies since `.[tests]` brings in
+    # overrides that may bring the vllm version down
+    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
+        session.install(vllm_version, "--no-deps")
+
     session.run(
         "pytest",
         "--cov",
