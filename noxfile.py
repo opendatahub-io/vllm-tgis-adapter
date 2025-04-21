@@ -18,10 +18,12 @@ versions = [
 
 @nox.session(python=versions)
 def tests(session: nox.Session) -> None:
-    session.install(".[tests]")
-
     if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
         session.install(vllm_version)
+
+    session.install(".[tests]")
+    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
+        session.install(vllm_version, "--no-deps")
 
     session.run(
         "pytest",
