@@ -46,8 +46,12 @@ async def build_http_server(
 
         return await call_next(request)
 
-    model_config = await engine.get_model_config()
-    maybe_coroutine = init_app_state(engine, model_config, app.state, args)
+    if hasattr(engine, "get_vllm_config"):
+        vllm_config = await engine.get_vllm_config()
+        maybe_coroutine = init_app_state(engine, vllm_config, app.state, args)
+    else:
+        model_config = await engine.get_model_config()
+        maybe_coroutine = init_app_state(engine, model_config, app.state, args)
     if inspect.isawaitable(maybe_coroutine):
         await maybe_coroutine
 
