@@ -33,12 +33,7 @@ dependencies = [
   "grpcio-reflection==1.70.0",
   "accelerate==1.7.0",
   "hf-transfer==0.1.9",
-  "cachetools~=5.5",
-  # additional dependencies for OpenTelemetry tracing
-  "opentelemetry-sdk>=1.30.0",
-  "opentelemetry-api>=1.30.0",
-  "opentelemetry-exporter-otlp>=1.28.0",
-  "opentelemetry-semantic-conventions-ai>=0.4.1"
+  "cachetools~=5.5"
 ]
 
 [project.urls]
