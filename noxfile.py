@@ -17,6 +17,12 @@ versions = [
 
 
 @nox.session(python=versions)
+def build_vllm(session: nox.Session) -> None:
+    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
+        session.install(vllm_version)
+
+
+@nox.session(python=versions)
 def tests(session: nox.Session) -> None:
     if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
         session.install(vllm_version)

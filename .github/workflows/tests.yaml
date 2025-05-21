@@ -98,6 +98,11 @@ jobs:
           path: /home/runner/.cache/ccache
           key: ${{ runner.os }}
 
+      - name: build vllm
+        run: nox --envdir ~/.nox --reuse-venv=yes -v -s build_vllm-${{ matrix.pyv }}
+        env:
+          VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
+
       - name: Run tests
         run: nox --envdir ~/.nox --reuse-venv=yes -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
         env:
