@@ -37,7 +37,6 @@ jobs:
           # - "" # skip the pypi version as it will not work on CPU
           - "git+https://github.com/vllm-project/vllm@v0.7.2"
           - "git+https://github.com/vllm-project/vllm@main"
-          - "git+https://github.com/opendatahub-io/vllm@main"
 
     steps:
       - name: Check out the repository
