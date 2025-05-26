@@ -59,7 +59,7 @@ dev = [
   "ruff==0.11.11",
   "mypy==1.15.0",
   "types-protobuf==5.28.0.20240924",
-  "types-requests==2.32.0.20241016"
+  "types-requests==2.32.0.20250515"
 ]
 flash_attn = [
   # it's easier to install flash-attn from wheel rather than like this as extra
