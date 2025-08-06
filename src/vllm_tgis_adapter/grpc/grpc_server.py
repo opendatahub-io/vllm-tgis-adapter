@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     from vllm.sequence import Logprob
     from vllm.transformers_utils.tokenizer import AnyTokenizer
 
-    from .adapters import PromptAdapterRequest
+
     from .pb.generation_pb2 import (
         BatchedGenerationRequest,
         BatchedTokenizeRequest,
@@ -622,7 +622,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         | BatchedTokenizeRequest,
         context: ServicerContext,
         vllm_model_handler: OpenAIServingModels,
-    ) -> dict[str, LoRARequest | PromptAdapterRequest]:
+    ) -> dict[str, LoRARequest]:
         try:
             adapters = await validate_adapters(
                 request=request,

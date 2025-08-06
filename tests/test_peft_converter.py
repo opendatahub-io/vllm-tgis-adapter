@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from vllm_tgis_adapter.tgis_utils.convert_pt_to_prompt import convert_pt_to_peft
+import pytest
 
 
 def test_peft_converter(prompt_tune_path, tmp_path):
-    convert_pt_to_peft(input_dir=prompt_tune_path, output_dir=tmp_path)
-
-    assert Path.exists(tmp_path / "adapter_config.json")
-    assert Path.exists(tmp_path / "adapter_model.safetensors")
+    # PROMPT_TUNING adapters are no longer supported in vLLM V1
+    # This test is disabled as the conversion functionality has been removed
+    pytest.skip("PROMPT_TUNING adapters are deprecated in vLLM V1")
