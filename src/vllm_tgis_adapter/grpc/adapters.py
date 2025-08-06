@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from vllm.entrypoints.openai.protocol import ErrorResponse
-from vllm.prompt_adapter.request import PromptAdapterRequest
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils.convert_pt_to_prompt import convert_pt_to_peft
@@ -69,7 +68,7 @@ async def validate_adapters(
     | BatchedTokenizeRequest,
     adapter_store: AdapterStore | None,
     vllm_model_handler: OpenAIServingModels,
-) -> dict[str, LoRARequest | PromptAdapterRequest]:
+) -> dict[str, LoRARequest]:
     """Validate the adapters.
 
     Takes the adapter name from the request and constructs a valid
@@ -135,18 +134,6 @@ async def validate_adapters(
                 return {"lora_request": lora_request}
             # Use our cache for everything else
             adapter_store.adapters[adapter_id] = adapter_metadata
-
-    # Build the proper vllm request object
-    if adapter_metadata.adapter_type == "PROMPT_TUNING":
-        prompt_adapter_request = PromptAdapterRequest(
-            prompt_adapter_id=adapter_metadata.unique_id,
-            prompt_adapter_name=adapter_id,
-            prompt_adapter_local_path=adapter_metadata.full_path,
-            prompt_adapter_num_virtual_tokens=adapter_metadata.full_config.get(
-                "num_virtual_tokens", 0
-            ),
-        )
-    return {"prompt_adapter_request": prompt_adapter_request}
 
     # All other types unsupported
     TGISValidationError.AdapterUnsupported.error(adapter_metadata.adapter_type)  # noqa: RET503
