@@ -105,6 +105,7 @@ def args(  # noqa: PLR0913
             f"--grpc-port={grpc_server_port}",
             f"--port={http_server_port}",
             "--dtype=float32",
+            "--device=cpu",
             *extra_args,
         ],
     )
