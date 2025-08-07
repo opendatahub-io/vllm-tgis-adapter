@@ -11,14 +11,12 @@ import concurrent.futures
 import dataclasses
 import json
 import re
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from vllm.entrypoints.openai.protocol import ErrorResponse
 
 from vllm_tgis_adapter.logging import init_logger
-
 
 from .validation import TGISValidationError
 
@@ -174,8 +172,6 @@ def _load_adapter_metadata(adapter_id: str, adapter_path: str, unique_id: int) -
         TGISValidationError.AdapterNotFound.error(
             adapter_id, "directory does not exist"
         )
-
-
 
     adapter_config_path = Path(adapter_path) / "adapter_config.json"
     if not Path(adapter_config_path).exists():

@@ -64,7 +64,6 @@ if TYPE_CHECKING:
     from vllm.sequence import Logprob
     from vllm.transformers_utils.tokenizer import AnyTokenizer
 
-
     from .pb.generation_pb2 import (
         BatchedGenerationRequest,
         BatchedTokenizeRequest,
