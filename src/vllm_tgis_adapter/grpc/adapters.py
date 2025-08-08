@@ -11,15 +11,12 @@ import concurrent.futures
 import dataclasses
 import json
 import re
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from vllm.entrypoints.openai.protocol import ErrorResponse
-from vllm.prompt_adapter.request import PromptAdapterRequest
 
 from vllm_tgis_adapter.logging import init_logger
-from vllm_tgis_adapter.tgis_utils.convert_pt_to_prompt import convert_pt_to_peft
 
 from .validation import TGISValidationError
 
@@ -69,7 +66,7 @@ async def validate_adapters(
     | BatchedTokenizeRequest,
     adapter_store: AdapterStore | None,
     vllm_model_handler: OpenAIServingModels,
-) -> dict[str, LoRARequest | PromptAdapterRequest]:
+) -> dict[str, LoRARequest]:
     """Validate the adapters.
 
     Takes the adapter name from the request and constructs a valid
@@ -136,18 +133,6 @@ async def validate_adapters(
             # Use our cache for everything else
             adapter_store.adapters[adapter_id] = adapter_metadata
 
-    # Build the proper vllm request object
-    if adapter_metadata.adapter_type == "PROMPT_TUNING":
-        prompt_adapter_request = PromptAdapterRequest(
-            prompt_adapter_id=adapter_metadata.unique_id,
-            prompt_adapter_name=adapter_id,
-            prompt_adapter_local_path=adapter_metadata.full_path,
-            prompt_adapter_num_virtual_tokens=adapter_metadata.full_config.get(
-                "num_virtual_tokens", 0
-            ),
-        )
-    return {"prompt_adapter_request": prompt_adapter_request}
-
     # All other types unsupported
     TGISValidationError.AdapterUnsupported.error(adapter_metadata.adapter_type)  # noqa: RET503
 
@@ -187,17 +172,6 @@ def _load_adapter_metadata(adapter_id: str, adapter_path: str, unique_id: int) -
         TGISValidationError.AdapterNotFound.error(
             adapter_id, "directory does not exist"
         )
-
-    # 🌶️🌶️🌶️ Check for caikit-style adapters first
-    if (Path(adapter_path) / "decoder.pt").exists():
-        # Create new temporary directory and convert to peft format there
-        # NB: This requires write access to /tmp
-        # Intentionally setting delete=False, we need the new adapter
-        # files to exist for the life of the process
-        logger.info("Converting caikit-style adapter %s to peft format", adapter_id)
-        temp_dir = tempfile.TemporaryDirectory(delete=False)
-        convert_pt_to_peft(adapter_path, temp_dir.name)
-        adapter_path = temp_dir.name
 
     adapter_config_path = Path(adapter_path) / "adapter_config.json"
     if not Path(adapter_config_path).exists():

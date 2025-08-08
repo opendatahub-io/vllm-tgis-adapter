@@ -63,14 +63,11 @@ def add_logging_wrappers(engine: EngineClient) -> None:
         sampling_params = _get_arg("sampling_params", 1, *args, **kwargs)
         request_id = _get_arg("request_id", 2, *args, **kwargs)
         lora_request = _get_arg("lora_request", 3, *args, **kwargs)
-        prompt_adapter_request = _get_arg("prompt_adapter_request", 5, *args, **kwargs)
 
         correlation_id = get_correlation_id(request_id=request_id)
         adapter_id = None
         if lora_request:
             adapter_id = lora_request.adapter_id
-        elif prompt_adapter_request:
-            adapter_id = prompt_adapter_request.prompt_adapter_id
 
         # Log the request
         with suppress(BaseException):

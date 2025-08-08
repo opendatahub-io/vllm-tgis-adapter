@@ -14,6 +14,8 @@ env:
   # facilitate testing by building vLLM for CPU when needed
   VLLM_CPU_DISABLE_AVX512: "true"
   VLLM_TARGET_DEVICE: "cpu"
+  VLLM_CPU_ONLY: "1"
+  CMAKE_ARGS: "-DVLLM_CPU_ONLY=ON"
   # prefer index for torch cpu version
   UV_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
   # have uv match pip's behaviour for extra index operations
@@ -26,7 +28,7 @@ concurrency:
 
 jobs:
   tests:
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -35,7 +37,7 @@ jobs:
         pyv: ["3.12"]
         vllm_version:
           # - "" # skip the pypi version as it will not work on CPU
-          - "git+https://github.com/vllm-project/vllm@v0.7.2"
+          - "git+https://github.com/vllm-project/vllm@v0.10.0"
           - "git+https://github.com/vllm-project/vllm@main"
 
     steps:
