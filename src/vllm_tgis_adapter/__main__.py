@@ -106,6 +106,9 @@ def run_and_catch_termination_cause(
 
 
 if __name__ == "__main__":
+    from vllm.entrypoints.utils import cli_env_setup
+
+    cli_env_setup()
     parser = FlexibleArgumentParser("vLLM TGIS GRPC + OpenAI REST api server")
     # convert to our custom env var arg parser
     parser = EnvVarArgumentParser(parser=make_arg_parser(parser))
