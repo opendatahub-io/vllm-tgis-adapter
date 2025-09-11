@@ -26,9 +26,9 @@ from vllm.tracing import (
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
-from vllm_tgis_adapter.tgis_utils.guided_decoding import (
-    get_outlines_guided_decoding_logits_processor,
-)
+# from vllm_tgis_adapter.tgis_utils.guided_decoding import (
+#     get_outlines_guided_decoding_logits_processor,
+# )
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
     ExpDecayLengthPenaltyWarper,
     TypicalLogitsWarperWrapper,
@@ -566,11 +566,11 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 )
             )
 
-        guided_decode_logit_processor = (
-            await get_outlines_guided_decoding_logits_processor(decoding, tokenizer)
-        )
-        if guided_decode_logit_processor is not None:
-            logits_processors.append(guided_decode_logit_processor)
+        # guided_decode_logit_processor = (
+        #     await get_outlines_guided_decoding_logits_processor(decoding, tokenizer)
+        # )
+        # if guided_decode_logit_processor is not None:
+        #     logits_processors.append(guided_decode_logit_processor)
 
         time_limit_millis = stopping.time_limit_millis
         deadline = (
