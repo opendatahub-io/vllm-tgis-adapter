@@ -37,7 +37,7 @@ jobs:
         pyv: ["3.12"]
         vllm_version:
           # - "" # skip the pypi version as it will not work on CPU
-          - "git+https://github.com/vllm-project/vllm@v0.10.0"
+          - "git+https://github.com/vllm-project/vllm@v0.10.2"
           - "git+https://github.com/vllm-project/vllm@main"
 
     steps:
