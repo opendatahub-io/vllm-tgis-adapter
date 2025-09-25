@@ -46,7 +46,6 @@ def tests(session: nox.Session) -> None:
 @nox.session(python=versions)
 def lint(session: nox.Session) -> None:
     session.install("pre-commit")
-    session.install("-e", ".[dev]")
 
     if run_mypy := "--mypy" in session.posargs:
         session.posargs.remove("--mypy")
