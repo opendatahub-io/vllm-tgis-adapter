@@ -1,7 +1,15 @@
+import importlib
 import os
+import urllib.request
+from functools import lru_cache
 from pathlib import Path
 
 import nox
+
+try:
+    import tomllib
+except ImportError:
+    import tomli  # nox installs toml for python<3.11
 
 nox.options.reuse_existing_virtualenvs = True
 nox.options.sessions = "lint", "tests"
@@ -16,23 +24,105 @@ versions = [
 ]
 
 
+@lru_cache
+def _get_build_dependencies_from_file(pyproject: Path) -> list[str]:
+    if not pyproject.exists():
+        raise FileNotFoundError(f"{pyproject} does not exist.")
+
+    with pyproject.open("rb") as fh:
+        lib = tomllib if importlib.util.find_spec("tomllib") else tomli
+        pyproject_data = lib.load(fh)
+
+    build_system = pyproject_data.get("build-system", {})
+    requires = build_system.get("requires", [])
+
+    if not requires:
+        raise ValueError("[build-system.requires] is empty")
+
+    return requires
+
+
+@lru_cache
+def _get_build_dependencies_from_repo(repo_url: str, ref: str) -> list[str]:
+    """Retrieve build dependencies from pyproject.toml for the given github repo/ref."""
+    assert repo_url.startswith("https://github.com/"), (
+        "this can only work with github urls"
+    )
+
+    raw_url = (
+        repo_url.replace("github.com", "raw.githubusercontent.com")
+        + f"/{ref}/pyproject.toml"
+    )
+
+    response = urllib.request.urlopen(raw_url)  # noqa: S310
+    data = response.read()
+
+    lib = tomllib if importlib.util.find_spec("tomllib") else tomli
+    pyproject_data = lib.loads(data.decode())
+
+    build_system = pyproject_data.get("build-system", {})
+    requires = build_system.get("requires", [])
+
+    if not requires:
+        raise ValueError("[build-system.requires] is empty")
+
+    return requires
+
+
+def install_vllm_build_deps(session: nox.Session, vllm_version: str) -> None:
+    """Installs vllm build deps parsing them from the given vllm repo path/url.
+
+    This is required because the vllm CPU build for PEP517/PEP518 style build is broken
+    and we have to manually install build dependencies and use --no-build-isolation.
+    """
+    maybe_repo_path = Path(vllm_version)
+    if maybe_repo_path.exists() and (maybe_repo_path / "pyproject.toml").exists():
+        pyproject = Path(vllm_version) / "pyproject.toml"
+        build_deps = _get_build_dependencies_from_file(pyproject)
+    elif vllm_version.startswith("git+https://github.com/"):
+        url = vllm_version.lstrip("git+")
+        if "@" in vllm_version:
+            url, ref = url.split("@")
+        else:
+            import warnings
+
+            ref = "main"
+            warnings.warn(f"Ref not specified, assuming to be {ref}", stacklevel=2)
+
+        build_deps = _get_build_dependencies_from_repo(url, ref)
+
+    else:
+        raise NotImplementedError(
+            f"{vllm_version=} does not exist or url scheme is unsupported"
+        )
+
+    if not build_deps:
+        raise ValueError("build deps are empty?")
+
+    session.install(*build_deps)
+
+
+def install_vllm_if_overridden(session: nox.Session) -> None:
+    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
+        install_vllm_build_deps(session, vllm_version)
+        session.install("--no-build-isolation", vllm_version)
+
+
 @nox.session(python=versions)
 def build_vllm(session: nox.Session) -> None:
-    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
-        session.install(vllm_version)
+    install_vllm_if_overridden(session)
 
 
 @nox.session(python=versions)
 def tests(session: nox.Session) -> None:
-    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
-        session.install(vllm_version)
+    install_vllm_if_overridden(session)
 
     session.install(".[tests]")
 
-    # Re-install without dependencies since `.[tests]` brings in
-    # overrides that may bring the vllm version down
-    if vllm_version := os.getenv("VLLM_VERSION_OVERRIDE"):
-        session.install(vllm_version, "--no-deps")
+    # Re-install vllm since `.[tests]` brings in
+    # overrides that may bring the vllm version down.
+    # Should be a no-op most of the time.
+    install_vllm_if_overridden(session)
 
     session.run(
         "pytest",
