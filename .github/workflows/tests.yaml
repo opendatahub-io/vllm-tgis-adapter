@@ -12,10 +12,7 @@ on:
 env:
   FORCE_COLOR: "1"
   # facilitate testing by building vLLM for CPU when needed
-  VLLM_CPU_DISABLE_AVX512: "true"
   VLLM_TARGET_DEVICE: "cpu"
-  VLLM_CPU_ONLY: "1"
-  CMAKE_ARGS: "-DVLLM_CPU_ONLY=ON"
   # prefer index for torch cpu version
   UV_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
   # have uv match pip's behaviour for extra index operations
