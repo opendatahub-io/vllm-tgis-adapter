@@ -196,6 +196,9 @@ select = ["ALL"]
   "BLE001",
   "PLR0913"
 ]
+".github/scripts/install_vllm_build_deps.py" = [
+  "EXE003"
+]
 
 [tool.ruff.lint.flake8-type-checking]
 strict = true

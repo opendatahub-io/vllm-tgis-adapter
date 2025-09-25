@@ -24,8 +24,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-
-
 jobs:
   tests:
     timeout-minutes: 30
@@ -107,9 +105,9 @@ jobs:
           uv venv .venv
           source .venv/bin/activate
 
-          uv pip install --overrides requirements/cpu.txt --requirements requirements/build.txt
+          $GITHUB_WORKSPACE/.github/scripts/install_vllm_build_deps.py
 
-          python -m setup.py bdist_wheel
+          python setup.py bdist_wheel
 
       - name: Set vllm version override env var
         run: |
