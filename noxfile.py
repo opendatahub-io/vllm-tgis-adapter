@@ -80,7 +80,7 @@ def install_vllm_build_deps(session: nox.Session, vllm_version: str) -> None:
         pyproject = Path(vllm_version) / "pyproject.toml"
         build_deps = _get_build_dependencies_from_file(pyproject)
     elif vllm_version.startswith("git+https://github.com/"):
-        url = vllm_version.lstrip("git+")
+        url = vllm_version.lstrip("git+").rstrip(".git")
         if "@" in vllm_version:
             url, ref = url.split("@")
         else:
