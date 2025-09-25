@@ -46,13 +46,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          tool-cache: false
-          large-packages: false
-          docker-images: false
-
       - name: Install vLLM build deps
         run: |
           sudo apt update
