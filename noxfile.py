@@ -37,6 +37,7 @@ def tests(session: nox.Session) -> None:
         "--cov",
         "--cov-config=pyproject.toml",
         "--no-cov-on-fail",
+        "tests",
         *session.posargs,
         env={"COVERAGE_FILE": f".coverage.{session.python}"},
     )
