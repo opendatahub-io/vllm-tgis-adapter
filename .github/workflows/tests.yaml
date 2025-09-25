@@ -21,10 +21,13 @@ env:
   # have uv match pip's behaviour for extra index operations
   UV_INDEX_STRATEGY: "unsafe-best-match"
   VLLM_ALLOW_LONG_MAX_MODEL_LEN: 1
+  VLLM_REPO: "vllm-project/vllm"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+
+
 
 jobs:
   tests:
@@ -35,10 +38,9 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         pyv: ["3.12"]
-        vllm_version:
-          # - "" # skip the pypi version as it will not work on CPU
-          - "git+https://github.com/vllm-project/vllm@v0.10.0"
-          - "git+https://github.com/vllm-project/vllm@main"
+        vllm_ref:
+          - "v0.10.0"
+          - "main"
 
     steps:
       - name: Check out the repository
@@ -61,7 +63,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-          cache-suffix: ${{matrix.vllm_version}}
+          cache-suffix: ${{matrix.vllm_ref}}
 
       - name: Install nox
         run: |
@@ -72,7 +74,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /home/runner/.nox
-          key: ${{ runner.os }}-python-${{matrix.pyv}}-${{ hashFiles('noxfile.py') }}-${{matrix.vllm_version}}
+          key: ${{ runner.os }}-python-${{matrix.pyv}}-${{ hashFiles('noxfile.py') }}-${{matrix.vllm_ref}}
 
       - name: hf hub cache
         id: hf-cache
@@ -93,15 +95,33 @@ jobs:
           path: /home/runner/.cache/ccache
           key: ${{ runner.os }}
 
-      - name: build vllm
-        run: nox --envdir ~/.nox --reuse-venv=yes -v -s build_vllm-${{ matrix.pyv }}
-        env:
-          VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
+      - name: Check out the vllm repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ${{ env.VLLM_REPO }}
+          ref: ${{ matrix.vllm_ref }}
+          path: vllm
+
+      - name: Build vllm
+        run: |
+          cd vllm
+
+          uv venv .venv
+          source .venv/bin/activate
+
+          uv pip install --overrides requirements/cpu.txt --requirements requirements/build.txt
+
+          python -m setup.py bdist_wheel
+
+      - name: Set vllm version override env var
+        run: |
+          vllm_wheel="$(find vllm/dist -name '*.whl' -exec realpath {} \;)"
+
+          echo "VLLM_VERSION_OVERRIDE=$vllm_wheel" | tee -a "$GITHUB_ENV"
 
       - name: Run tests
         run: nox --envdir ~/.nox --reuse-venv=yes -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
-        env:
-          VLLM_VERSION_OVERRIDE: ${{ matrix.vllm_version }}
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v5
