@@ -91,9 +91,9 @@ async def validate_adapters(
     async with adapter_store.load_locks.setdefault(adapter_id, asyncio.Lock()):
         # Check VLLM server lora cache if this request matches an existing
         # LoRA adapter
-        if (existing_lora_request := _get_lora_request(
-            vllm_model_handler, adapter_id
-        )) is not None:
+        if (
+            existing_lora_request := _get_lora_request(vllm_model_handler, adapter_id)
+        ) is not None:
             return {"lora_request": existing_lora_request}
 
         # If not already cached, we need to validate that files exist and
@@ -156,14 +156,16 @@ async def _load_lora_adapter(
     )
     if isinstance(load_result, ErrorResponse):
         raise ValueError(load_result.message)  ## noqa: TRY004
-    if (existing_lora_request := _get_lora_request(
-        vllm_model_handler, adapter_id
-    )) is not None:
+    if (
+        existing_lora_request := _get_lora_request(vllm_model_handler, adapter_id)
+    ) is not None:
         return existing_lora_request
     raise RuntimeError("vllm server failed to load LoRA adapter")
 
+
 def _get_lora_request(
-    vllm_model_handler: OpenAIServingModels, adapter_id: str,
+    vllm_model_handler: OpenAIServingModels,
+    adapter_id: str,
 ) -> LoRARequest | None:
     lora_requests = vllm_model_handler.lora_requests
     if isinstance(lora_requests, dict):
@@ -176,6 +178,7 @@ def _get_lora_request(
         if existing_lora_request.lora_name == adapter_id:
             return existing_lora_request
     return None
+
 
 def _load_adapter_metadata(adapter_id: str, adapter_path: str, unique_id: int) -> dict:
     """Get adapter metadata from files.
