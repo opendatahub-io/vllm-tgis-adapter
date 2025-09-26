@@ -89,7 +89,6 @@ def args(  # noqa: PLR0913
             "__main__.py",
             f"--grpc-port={grpc_server_port}",
             f"--port={http_server_port}",
-            "--dtype=float32",
             "--max-model-len=512",
             *extra_args,
         ],
