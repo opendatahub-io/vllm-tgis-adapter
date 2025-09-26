@@ -20,15 +20,12 @@ def termination_log_fpath(tmp_path, monkeypatch):
     ],
     indirect=True,
 )
-def test_startup_fails(request, args, termination_log_fpath, lora_available):
+def test_startup_fails(request, args, termination_log_fpath):
     """Test that common set-up errors crash the server on startup.
 
     These errors should be properly reported in the termination log.
 
     """
-    if lora_available and args.enable_lora:
-        pytest.skip("This test requires a non-lora supported device to run")
-
     # Server fixture is called explicitly so that we can handle thrown exception
     with pytest.raises(TaskFailedError):
         _ = request.getfixturevalue("_servers")
