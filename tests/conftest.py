@@ -195,7 +195,7 @@ def _servers(
     t.start()
 
     try:
-        wait_until(_health_check)
+        wait_until(_health_check, timeout=300, pause=10)
         yield
     finally:
         if task:
