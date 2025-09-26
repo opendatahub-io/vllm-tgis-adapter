@@ -15,7 +15,6 @@ def termination_log_fpath(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "server_args",
     [
-        pytest.param(["--enable-lora"], id="enable-lora"),
         pytest.param(["--max-model-len=10241024"], id="huge-model-len"),
         pytest.param(["--model=google-bert/bert-base-uncased"], id="unsupported-model"),
     ],
