@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def lora_available() -> bool:
-    # lora does not work on cpu
+    # lora works on CPU since v0.10.0
     return not vllm.platforms.current_platform.is_cpu()
 
 
