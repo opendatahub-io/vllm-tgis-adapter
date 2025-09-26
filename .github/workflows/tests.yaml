@@ -18,6 +18,8 @@ env:
   # have uv match pip's behaviour for extra index operations
   UV_INDEX_STRATEGY: "unsafe-best-match"
   VLLM_REPO: "vllm-project/vllm"
+  # vllm configuration
+  VLLM_USE_V1: 1 # starting from v0.10.0, V1 must be enabled on CPU
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
