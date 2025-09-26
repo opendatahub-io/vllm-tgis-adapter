@@ -53,20 +53,22 @@ def wait_until(
     start = time.perf_counter()
     exc = None
 
+    attempts = 0
     while (time.perf_counter() - start) < timeout:
+        attempts += 1
         try:
             value = pred()
         except TaskFailedError:
             raise
         except Exception as e:  # noqa: BLE001
-            print(f"Got {e=}")
+            print(f"Attempt {attempts} failed, got {e=}")
             exc = e
         else:
             return value
 
         time.sleep(pause)
 
-    raise TimeoutError("timed out waiting") from exc
+    raise TimeoutError(f"timed out waiting ({timeout=}, {attempts=}) ") from exc
 
 
 def get_server_certificate(host: str, port: int) -> str:
