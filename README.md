@@ -86,11 +86,22 @@ The standard vllm built requires an Nvidia GPU. When this is not available, it i
 
 ```bash
 
-env \
-    VLLM_CPU_DISABLE_AVX512=true VLLM_TARGET_DEVICE=cpu \
-    UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
+git clone https://github.com/vllm-project/vllm
+cd vllm
+
+uv venv
+source .venv/bin/activate
+
+export UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
     UV_INDEX_STRATEGY=unsafe-best-match\
-    uv pip install git+https://github.com/vllm-project/vllm
+
+.github/scripts/install_vllm_build_deps.py pyproject.toml
+
+env \
+    VLLM_TARGET_DEVICE=cpu \
+    python setup.py bdist_wheel
+export VLLM_VERSION_OVERRIDE=$PWD/dist/*whl
+# the nox session can now be run with the custom built vllm cpu version
 ```
 
 making it possible to run the tests on most hardware. Please note that the `uv` extra index url is required in order to install the torch CPU version.
