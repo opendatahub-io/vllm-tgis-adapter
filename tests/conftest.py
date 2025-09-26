@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Annotated, TypeVar
 
 import pytest
 import requests
+import vllm
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.utils import FlexibleArgumentParser
 
@@ -32,12 +33,24 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
+def lora_available() -> bool:
+    # lora does not work on cpu
+    return not vllm.platforms.current_platform.is_cpu()
+
+
+@pytest.fixture
 def lora_adapter_name(request: pytest.FixtureRequest) -> str:
+    if not request.getfixturevalue("lora_available"):
+        pytest.skip("Lora is not available with this configuration")
+
     return "lora-test"
 
 
 @pytest.fixture
 def lora_adapter_path(request: pytest.FixtureRequest) -> str:
+    if not request.getfixturevalue("lora_available"):
+        pytest.skip("Lora is not available with this configuration")
+
     from huggingface_hub import snapshot_download
 
     path = snapshot_download(repo_id="yard1/llama-2-7b-sql-lora-test")
@@ -66,6 +79,7 @@ def args(  # noqa: PLR0913
     monkeypatch,
     grpc_server_port: ArgFixture[int],
     http_server_port: ArgFixture[int],
+    lora_available: ArgFixture[bool],
     disable_frontend_multiprocessing,
     server_args: ArgFixture[list[str]],
 ) -> argparse.Namespace:
@@ -74,10 +88,11 @@ def args(  # noqa: PLR0913
 
     # Extra server init flags
     extra_args: list[str] = [*server_args]
-    name = request.getfixturevalue("lora_adapter_name")
-    path = request.getfixturevalue("lora_adapter_path")
+    if lora_available:
+        name = request.getfixturevalue("lora_adapter_name")
+        path = request.getfixturevalue("lora_adapter_path")
 
-    extra_args.extend(("--enable-lora", f"--lora-modules={name}={path}"))
+        extra_args.extend(("--enable-lora", f"--lora-modules={name}={path}"))
 
     if disable_frontend_multiprocessing:
         extra_args.append("--disable-frontend-multiprocessing")
