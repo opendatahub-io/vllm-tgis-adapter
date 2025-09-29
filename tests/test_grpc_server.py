@@ -1,8 +1,29 @@
 import asyncio
+from typing import TYPE_CHECKING
 
 import pytest
 
+from vllm_tgis_adapter.grpc.pb.generation_pb2 import DecodingParameters
+
 from .utils import GrpcClient
+
+if TYPE_CHECKING:
+    from vllm.sampling_params import GuidedDecodingParams
+
+
+simplified_sql_grammar = """
+    root ::= select_statement
+
+    select_statement ::= "SELECT " column " from " table " where " condition
+
+    column ::= "col_1 " | "col_2 "
+
+    table ::= "table_1 " | "table_2 "
+
+    condition ::= column "= " number
+
+    number ::= "1 " | "2 "
+"""
 
 
 @pytest.fixture
@@ -138,3 +159,65 @@ def test_error_handling(mocker):
     # Does not raises exception
     asyncio.run(_handle_exception(engine_error, dummy_func, dummy_arg_0))
     spy.assert_called_once_with(engine_error)
+
+
+@pytest.mark.parametrize(
+    "decoding_params",
+    [
+        pytest.param(
+            DecodingParameters(format="JSON"),
+            id="guided_decoding_json",
+        ),
+        pytest.param(
+            DecodingParameters(
+                json_schema='{"schema": {"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}}}'  # noqa: E501
+            ),
+            id="guided_decoding_json_schema",
+        ),
+        pytest.param(
+            DecodingParameters(regex=r"\d.\d+"),
+            id="guided_decoding_regex",
+        ),
+        pytest.param(
+            DecodingParameters(choice={"choices": ["1", "2", "3", "4"]}),
+            id="guided_decoding_choices",
+        ),
+        pytest.param(
+            DecodingParameters(grammar=simplified_sql_grammar),
+            id="guided_decoding_grammar",
+        ),
+    ],
+)
+def test_guided_decoding_request(
+    grpc_client,
+    mocker,
+    decoding_params: DecodingParameters,
+):
+    from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
+
+    spy = mocker.spy(TextGenerationService, "_make_generator")
+    response = grpc_client.make_request(
+        "hello", params_kwargs={"decoding": decoding_params}
+    )
+    assert response.text
+
+    spy.assert_called_once()
+    spied_sampling_params = spy.call_args.kwargs["sampling_params"]
+
+    spied_decoding_params: GuidedDecodingParams = spied_sampling_params.guided_decoding
+    if decoding_params.format == DecodingParameters.ResponseFormat.JSON:
+        assert spied_decoding_params.json_object
+    elif decoding_params.json_schema:
+        assert spied_decoding_params.json == decoding_params.json_schema
+    elif decoding_params.regex:
+        assert spied_decoding_params.regex == decoding_params.regex
+    elif decoding_params.choice:
+        # choices are converted to a grammar
+        assert all(
+            value in spied_decoding_params.grammar
+            for value in decoding_params.choice.choices
+        )
+    elif decoding_params.grammar:
+        assert spied_decoding_params.grammar == decoding_params.grammar
+    else:
+        raise ValueError

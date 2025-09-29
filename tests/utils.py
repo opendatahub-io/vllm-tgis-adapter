@@ -24,6 +24,8 @@ from vllm_tgis_adapter.grpc.pb.generation_pb2_grpc import GenerationServiceStub
 if TYPE_CHECKING:
     from collections.abc import Generator, Sequence
 
+    from google.protobuf.message import Message
+
     from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
         GenerationResponse,
         ModelInfoResponse,
@@ -125,13 +127,14 @@ class GrpcClient:
             request=ModelInfoRequest(model_id=model_id),
         )
 
-    def make_request(
+    def make_request(  # noqa: PLR0913
         self,
         text: str | list[str],
         model_id: str | None = None,
         max_new_tokens: int = 10,
         adapter_id: str | None = None,
         metadata: list[tuple[str, str]] | None = None,
+        params_kwargs: dict[str, Message] | None = None,
     ) -> GenerationResponse | Sequence[GenerationResponse]:
         # assert model_id  # FIXME: is model_id required?
 
@@ -143,6 +146,7 @@ class GrpcClient:
             requests=[GenerationRequest(text=piece) for piece in text],
             params=Parameters(
                 stopping=StoppingCriteria(max_new_tokens=max_new_tokens),
+                **(params_kwargs if params_kwargs is not None else {}),
             ),
             adapter_id=adapter_id,
         )
