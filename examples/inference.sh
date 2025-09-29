@@ -21,7 +21,8 @@ grpcurl -v \
       "stopping": {
         "min_new_tokens": 10,
         "max_new_tokens": 100
-      }
+      },
+      "decoding": {"regex": "\d\.\d+"}
     }
   }' \
 	"${GRPC_HOSTNAME}:${GRPC_PORT}" \
