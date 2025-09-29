@@ -14,6 +14,7 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
+from vllm import __version_tuple__ as vllm_version
 from vllm.engine.multiprocessing import MQEngineDeadError
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TokensPrompt, token_inputs
@@ -27,6 +28,7 @@ from vllm.tracing import (
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
 from vllm_tgis_adapter.tgis_utils.guided_decoding import (
+    get_guided_decoding_params,
     get_outlines_guided_decoding_logits_processor,
 )
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
@@ -494,7 +496,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         return correlation_id
 
-    async def _validate_and_convert_params(
+    async def _validate_and_convert_params(  # noqa: C901
         self,
         params: Parameters,
         tokenizer: AnyTokenizer,
@@ -566,18 +568,21 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 )
             )
 
-        guided_decode_logit_processor = (
-            await get_outlines_guided_decoding_logits_processor(decoding, tokenizer)
-        )
-        if guided_decode_logit_processor is not None:
-            logits_processors.append(guided_decode_logit_processor)
+        sampling_params_kwargs: dict[str, Any] = {}
+        if vllm_version <= (0, 10, 0):
+            guided_decode_logit_processor = (
+                await get_outlines_guided_decoding_logits_processor(decoding, tokenizer)
+            )
+            if guided_decode_logit_processor is not None:
+                logits_processors.append(guided_decode_logit_processor)
+        elif guided_decoding_param := get_guided_decoding_params(decoding):
+            sampling_params_kwargs["guided_decoding"] = guided_decoding_param
 
         time_limit_millis = stopping.time_limit_millis
         deadline = (
             time.time() + time_limit_millis / 1000.0 if time_limit_millis > 0 else None
         )
 
-        random_sampling_params: dict[str, Any]
         temperature = sampling.temperature if sampling.HasField("temperature") else 1.0
         if greedy or temperature == 0.0:
             # 0.0 temperature is equivalent to greedy decoding
@@ -589,6 +594,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 "top_p": with_default(sampling.top_p, 1.0),
                 "seed": sampling.seed if sampling.HasField("seed") else None,
             }
+        sampling_params_kwargs.update(random_sampling_params)
 
         try:
             sampling_params = SamplingParams(
@@ -605,7 +611,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
                 if stopping.HasField("include_stop_sequence")
                 else self.default_include_stop_seqs,
                 skip_special_tokens=self.skip_special_tokens,
-                **random_sampling_params,
+                **sampling_params_kwargs,
             )
         except ValueError as vllm_validation_error:
             # There may be validation cases caught by vLLM that are not covered
