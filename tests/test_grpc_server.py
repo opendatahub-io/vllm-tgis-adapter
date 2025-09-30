@@ -151,15 +151,18 @@ def test_error_handling(mocker):
 
 def test_guided_decoding_parameters_passed_to_engine(grpc_client, mocker):
     """Test that guided decoding parameters are properly passed from gRPC to engine.
-    
-    This test focuses on verifying parameter passing rather than guided decoding functionality,
-    making it suitable for CPU execution where guided decoding might not work perfectly.
+
+    This test focuses on verifying parameter passing rather than guided decoding
+    functionality, making it suitable for CPU execution where guided decoding
+    might not work perfectly.
     """
     from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
 
     # Spy on the _validate_and_convert_params method to intercept parameter processing
-    validate_params_spy = mocker.spy(TextGenerationService, "_validate_and_convert_params")
-    
+    validate_params_spy = mocker.spy(
+        TextGenerationService, "_validate_and_convert_params"
+    )
+
     # Also spy on _make_generator to verify final parameters
     engine_generate_spy = mocker.spy(TextGenerationService, "_make_generator")
 
@@ -175,7 +178,8 @@ def test_guided_decoding_parameters_passed_to_engine(grpc_client, mocker):
         ),
     )
 
-    # Make the request - we don't care if guided decoding works, just that params are passed
+    # Make the request - we don't care if guided decoding works, just that
+    # params are passed
     try:
         response = grpc_client.generation_service_stub.Generate(request=request)
         # Basic response validation
@@ -183,7 +187,9 @@ def test_guided_decoding_parameters_passed_to_engine(grpc_client, mocker):
     except Exception as e:
         # If the request fails due to guided decoding issues, that's OK for this test
         # We're testing parameter passing, not guided decoding functionality
-        if any(term in str(e).lower() for term in ['guided', 'outlines', 'json', 'schema']):
+        if any(
+            term in str(e).lower() for term in ["guided", "outlines", "json", "schema"]
+        ):
             # This is expected on CPU - guided decoding might not work
             pass
         else:
@@ -194,14 +200,14 @@ def test_guided_decoding_parameters_passed_to_engine(grpc_client, mocker):
     validate_params_spy.assert_called_once()
     call_args = validate_params_spy.call_args[0]
     params_arg = call_args[1]  # Second argument is the Parameters object
-    
+
     # Verify the guided decoding parameters were present in the request
     assert params_arg.decoding.HasField("json_schema")
     assert params_arg.decoding.json_schema == json_schema
 
     # Verify engine.generate was called (even if it failed later)
     engine_generate_spy.assert_called_once()
-    
+
     # Get the sampling_params that were passed to the engine
     engine_call_kwargs = engine_generate_spy.call_args[1]
     sampling_params = engine_call_kwargs["sampling_params"]
@@ -221,11 +227,13 @@ def test_guided_decoding_parameters_passed_to_engine(grpc_client, mocker):
 
 
 def test_guided_decoding_different_types(grpc_client, mocker):
-    """Test that different guided decoding parameter types are properly passed to engine."""
+    """Test that different guided decoding parameter types are passed to engine."""
     from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
 
     # Spy on parameter validation to verify guided decoding params are processed
-    validate_params_spy = mocker.spy(TextGenerationService, "_validate_and_convert_params")
+    validate_params_spy = mocker.spy(
+        TextGenerationService, "_validate_and_convert_params"
+    )
     engine_generate_spy = mocker.spy(TextGenerationService, "_make_generator")
 
     # Test different guided decoding types
@@ -271,7 +279,10 @@ def test_guided_decoding_different_types(grpc_client, mocker):
             grpc_client.generation_service_stub.Generate(request=request)
         except Exception as e:
             # Allow guided decoding failures on CPU
-            if any(term in str(e).lower() for term in ['guided', 'outlines', 'json', 'regex']):
+            if any(
+                term in str(e).lower()
+                for term in ["guided", "outlines", "json", "regex"]
+            ):
                 pass
             else:
                 raise
@@ -279,7 +290,7 @@ def test_guided_decoding_different_types(grpc_client, mocker):
         # Verify parameter processing was called
         validate_params_spy.assert_called_once()
         params_arg = validate_params_spy.call_args[0][1]
-        
+
         # Verify the specific guided decoding field was set
         assert params_arg.decoding.HasField(test_case["field"])
 
@@ -292,7 +303,9 @@ def test_no_guided_decoding_parameters(grpc_client, mocker):
     from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
 
     # Spy on parameter processing
-    validate_params_spy = mocker.spy(TextGenerationService, "_validate_and_convert_params")
+    validate_params_spy = mocker.spy(
+        TextGenerationService, "_validate_and_convert_params"
+    )
     engine_generate_spy = mocker.spy(TextGenerationService, "_make_generator")
 
     # Create a request without guided decoding
@@ -314,7 +327,7 @@ def test_no_guided_decoding_parameters(grpc_client, mocker):
     # Verify parameter processing
     validate_params_spy.assert_called_once()
     params_arg = validate_params_spy.call_args[0][1]
-    
+
     # Verify no guided decoding fields are set
     guided_fields = ["json_schema", "regex", "choice", "grammar", "format"]
     for field in guided_fields:
