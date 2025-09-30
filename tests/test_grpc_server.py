@@ -162,10 +162,6 @@ def test_error_handling(mocker):
     spy.assert_called_once_with(engine_error)
 
 
-@pytest.mark.xfail(
-    vllm_version <= (0, 10, 0),
-    reason="guided decoding broken vllm<=0.10.0",
-)
 @pytest.mark.parametrize(
     "decoding_params",
     [
@@ -190,6 +186,10 @@ def test_error_handling(mocker):
         pytest.param(
             DecodingParameters(grammar=simplified_sql_grammar),
             id="guided_decoding_grammar",
+            marks=pytest.mark.xfail(
+                vllm_version <= (0, 10, 0),
+                reason="grammar not supported in v0.10.0",
+            ),
         ),
     ],
 )
