@@ -37,7 +37,8 @@ jobs:
         pyv: ["3.12"]
         vllm_ref:
           - "v0.10.0"
-          - "main"
+          - "v0.10.1.1"
+          - "v0.10.2"
 
     steps:
       - name: Check out the repository
