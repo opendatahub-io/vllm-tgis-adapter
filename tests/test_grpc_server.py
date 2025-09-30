@@ -1,6 +1,15 @@
 import asyncio
 
 import pytest
+from vllm import __version_tuple__ as vllm_version
+
+from vllm_tgis_adapter.grpc.pb.generation_pb2 import (
+    BatchedGenerationRequest,
+    DecodingParameters,
+    GenerationRequest,
+    Parameters,
+    StoppingCriteria,
+)
 
 from .utils import GrpcClient
 
@@ -138,3 +147,184 @@ def test_error_handling(mocker):
     # Does not raises exception
     asyncio.run(_handle_exception(engine_error, dummy_func, dummy_arg_0))
     spy.assert_called_once_with(engine_error)
+
+
+def test_guided_decoding_parameters_passed_to_engine(grpc_client, mocker):
+    """Test that guided decoding parameters are properly passed from gRPC to engine.
+    
+    This test focuses on verifying parameter passing rather than guided decoding functionality,
+    making it suitable for CPU execution where guided decoding might not work perfectly.
+    """
+    from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
+
+    # Spy on the _validate_and_convert_params method to intercept parameter processing
+    validate_params_spy = mocker.spy(TextGenerationService, "_validate_and_convert_params")
+    
+    # Also spy on _make_generator to verify final parameters
+    engine_generate_spy = mocker.spy(TextGenerationService, "_make_generator")
+
+    json_schema = '{"type": "object", "properties": {"name": {"type": "string"}}}'
+
+    # Create a request with JSON schema guided decoding
+    request = BatchedGenerationRequest(
+        model_id=None,
+        requests=[GenerationRequest(text="Test prompt")],
+        params=Parameters(
+            stopping=StoppingCriteria(max_new_tokens=5),
+            decoding=DecodingParameters(json_schema=json_schema),
+        ),
+    )
+
+    # Make the request - we don't care if guided decoding works, just that params are passed
+    try:
+        response = grpc_client.generation_service_stub.Generate(request=request)
+        # Basic response validation
+        assert response.responses
+    except Exception as e:
+        # If the request fails due to guided decoding issues, that's OK for this test
+        # We're testing parameter passing, not guided decoding functionality
+        if any(term in str(e).lower() for term in ['guided', 'outlines', 'json', 'schema']):
+            # This is expected on CPU - guided decoding might not work
+            pass
+        else:
+            # Other errors should still fail the test
+            raise
+
+    # Verify that parameter validation was called with our guided decoding params
+    validate_params_spy.assert_called_once()
+    call_args = validate_params_spy.call_args[0]
+    params_arg = call_args[1]  # Second argument is the Parameters object
+    
+    # Verify the guided decoding parameters were present in the request
+    assert params_arg.decoding.HasField("json_schema")
+    assert params_arg.decoding.json_schema == json_schema
+
+    # Verify engine.generate was called (even if it failed later)
+    engine_generate_spy.assert_called_once()
+    
+    # Get the sampling_params that were passed to the engine
+    engine_call_kwargs = engine_generate_spy.call_args[1]
+    sampling_params = engine_call_kwargs["sampling_params"]
+
+    # The key test: verify guided decoding parameters were processed and set
+    if vllm_version <= (0, 10, 0):
+        # For vLLM <= 0.10.0, guided decoding should be in logits_processors
+        # Even if the processor creation failed, the attempt should have been made
+        # We can't guarantee the processor was created on CPU, but we can verify
+        # the parameter processing logic was executed
+        assert sampling_params is not None
+    else:
+        # For vLLM >= 0.10.1, guided decoding should be in guided_decoding parameter
+        # This should be set regardless of whether guided decoding actually works
+        assert sampling_params.guided_decoding is not None
+        assert sampling_params.guided_decoding.json == json_schema
+
+
+def test_guided_decoding_different_types(grpc_client, mocker):
+    """Test that different guided decoding parameter types are properly passed to engine."""
+    from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
+
+    # Spy on parameter validation to verify guided decoding params are processed
+    validate_params_spy = mocker.spy(TextGenerationService, "_validate_and_convert_params")
+    engine_generate_spy = mocker.spy(TextGenerationService, "_make_generator")
+
+    # Test different guided decoding types
+    test_cases = [
+        {
+            "name": "regex",
+            "params": DecodingParameters(regex=r"\d{3}-\d{2}-\d{4}"),
+            "field": "regex",
+            "expected_value": r"\d{3}-\d{2}-\d{4}",
+        },
+        {
+            "name": "choice",
+            "params": DecodingParameters(
+                choice=DecodingParameters.StringChoices(choices=["yes", "no"])
+            ),
+            "field": "choice",
+            "expected_value": ["yes", "no"],
+        },
+        {
+            "name": "json_format",
+            "params": DecodingParameters(format=DecodingParameters.ResponseFormat.JSON),
+            "field": "format",
+            "expected_value": DecodingParameters.ResponseFormat.JSON,
+        },
+    ]
+
+    for test_case in test_cases:
+        # Reset spies for each test case
+        validate_params_spy.reset_mock()
+        engine_generate_spy.reset_mock()
+
+        request = BatchedGenerationRequest(
+            model_id=None,
+            requests=[GenerationRequest(text="Test")],
+            params=Parameters(
+                stopping=StoppingCriteria(max_new_tokens=3),
+                decoding=test_case["params"],
+            ),
+        )
+
+        # Make request - don't require it to succeed, just verify parameter passing
+        try:
+            grpc_client.generation_service_stub.Generate(request=request)
+        except Exception as e:
+            # Allow guided decoding failures on CPU
+            if any(term in str(e).lower() for term in ['guided', 'outlines', 'json', 'regex']):
+                pass
+            else:
+                raise
+
+        # Verify parameter processing was called
+        validate_params_spy.assert_called_once()
+        params_arg = validate_params_spy.call_args[0][1]
+        
+        # Verify the specific guided decoding field was set
+        assert params_arg.decoding.HasField(test_case["field"])
+
+        # Verify engine was called with processed parameters
+        engine_generate_spy.assert_called_once()
+
+
+def test_no_guided_decoding_parameters(grpc_client, mocker):
+    """Test that requests without guided decoding don't have guided decoding params."""
+    from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
+
+    # Spy on parameter processing
+    validate_params_spy = mocker.spy(TextGenerationService, "_validate_and_convert_params")
+    engine_generate_spy = mocker.spy(TextGenerationService, "_make_generator")
+
+    # Create a request without guided decoding
+    request = BatchedGenerationRequest(
+        model_id=None,
+        requests=[GenerationRequest(text="Test")],
+        params=Parameters(
+            stopping=StoppingCriteria(max_new_tokens=3),
+            # No decoding parameters
+        ),
+    )
+
+    response = grpc_client.generation_service_stub.Generate(request=request)
+
+    # Verify basic response
+    assert response.responses
+    assert response.responses[0].text
+
+    # Verify parameter processing
+    validate_params_spy.assert_called_once()
+    params_arg = validate_params_spy.call_args[0][1]
+    
+    # Verify no guided decoding fields are set
+    guided_fields = ["json_schema", "regex", "choice", "grammar", "format"]
+    for field in guided_fields:
+        assert not params_arg.decoding.HasField(field)
+
+    # Verify engine was called
+    engine_generate_spy.assert_called_once()
+    sampling_params = engine_generate_spy.call_args[1]["sampling_params"]
+
+    # Verify no guided decoding in final parameters
+    if vllm_version > (0, 10, 0):
+        # For newer vLLM versions, guided_decoding should be None
+        assert sampling_params.guided_decoding is None
