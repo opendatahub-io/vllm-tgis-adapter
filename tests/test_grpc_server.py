@@ -2,6 +2,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
+from vllm import __version_tuple__ as vllm_version
 
 from vllm_tgis_adapter.grpc.pb.generation_pb2 import DecodingParameters
 
@@ -161,6 +162,10 @@ def test_error_handling(mocker):
     spy.assert_called_once_with(engine_error)
 
 
+@pytest.mark.xfail(
+    vllm_version <= (0, 10, 0),
+    reason="guided decoding broken vllm<=0.10.0",
+)
 @pytest.mark.parametrize(
     "decoding_params",
     [
