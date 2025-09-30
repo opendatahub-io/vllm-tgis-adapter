@@ -56,7 +56,7 @@ async def get_outlines_guided_decoding_logits_processor(
     )
 
 
-# vllm<=0.10.0
+# vllm<=0.10.0 (mostly broken)
 def _get_guide_and_mode(
     decoding_params: DecodingParameters,
 ) -> tuple[str, GuidedDecodingMode] | tuple[None, None]:
