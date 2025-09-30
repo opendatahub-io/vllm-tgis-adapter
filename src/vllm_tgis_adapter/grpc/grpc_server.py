@@ -14,7 +14,6 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
-from vllm import __version_tuple__ as vllm_version
 from vllm.engine.multiprocessing import MQEngineDeadError
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TokensPrompt, token_inputs
@@ -29,7 +28,6 @@ from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
 from vllm_tgis_adapter.tgis_utils.guided_decoding import (
     get_guided_decoding_params,
-    get_outlines_guided_decoding_logits_processor,
 )
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
     ExpDecayLengthPenaltyWarper,
@@ -496,7 +494,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
 
         return correlation_id
 
-    async def _validate_and_convert_params(  # noqa: C901
+    async def _validate_and_convert_params(
         self,
         params: Parameters,
         tokenizer: AnyTokenizer,
@@ -569,13 +567,7 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
 
         sampling_params_kwargs: dict[str, Any] = {}
-        if vllm_version <= (0, 10, 0):
-            guided_decode_logit_processor = (
-                await get_outlines_guided_decoding_logits_processor(decoding, tokenizer)
-            )
-            if guided_decode_logit_processor is not None:
-                logits_processors.append(guided_decode_logit_processor)
-        elif guided_decoding_param := get_guided_decoding_params(decoding):
+        if guided_decoding_param := get_guided_decoding_params(decoding):
             sampling_params_kwargs["guided_decoding"] = guided_decoding_param
 
         time_limit_millis = stopping.time_limit_millis
