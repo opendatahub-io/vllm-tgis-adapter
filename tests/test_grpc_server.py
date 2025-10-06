@@ -131,6 +131,9 @@ def test_request_id(grpc_client, mocker):
     logger_spy.reset_mock()
 
 
+@pytest.mark.skipif(
+    vllm_version >= (0, 11, 0), reason="multiprocessing module dropped on vllm>=0.11.0"
+)
 def test_error_handling(mocker):
     from vllm.engine.multiprocessing import MQEngineDeadError
 

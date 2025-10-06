@@ -14,7 +14,6 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
-from vllm.engine.multiprocessing import MQEngineDeadError
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TokensPrompt, token_inputs
 from vllm.sampling_params import RequestOutputKind, SamplingParams
@@ -49,6 +48,12 @@ from .pb.generation_pb2 import (
     TokenizeResponse,
 )
 from .validation import validate_input, validate_params
+
+try:
+    from vllm.engine.multiprocessing import MQEngineDeadError
+except ImportError:
+    # vllm>=0.11.0
+    MQEngineDeadError = None
 
 if TYPE_CHECKING:
     import argparse
@@ -123,7 +128,8 @@ async def _handle_exception(
         if isinstance(e, OutOfMemoryError):
             logger.exception("%s caused GPU OOM error", func.__name__)
             await context.abort(StatusCode.RESOURCE_EXHAUSTED, str(e))
-        elif isinstance(e, MQEngineDeadError):
+        elif MQEngineDeadError is not None and isinstance(e, MQEngineDeadError):
+            # vllm <0.11.0
             logger.error(e)
             return
         logger.exception("%s failed", func.__name__)
