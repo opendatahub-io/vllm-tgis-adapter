@@ -38,7 +38,8 @@ jobs:
         vllm_ref:
           - "v0.10.0"
           - "v0.10.1.1"
-          - "v0.10.2"
+          - "v0.10.2" # vllm CPU isolated builds are broken from 0.10.0 until 0.10.2, hence the need for a custom build step (see below)
+          - "v0.11.0" # starting from v0.11.0, vllm isolated builds work again
 
     steps:
       - name: Check out the repository
@@ -101,7 +102,7 @@ jobs:
           ref: ${{ matrix.vllm_ref }}
           path: vllm
 
-      - name: Build vllm
+      - name: Build vllm # only required for CPU builds with vllm<0.11.0
         run: |
           cd vllm
 
