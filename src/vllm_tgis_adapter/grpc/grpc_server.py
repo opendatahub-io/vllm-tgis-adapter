@@ -5,6 +5,7 @@ import inspect
 import os
 import time
 import uuid
+import warnings
 from collections.abc import Callable, Coroutine
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -637,9 +638,18 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         return adapters
 
     async def _get_tokenizer(self, adapter_kwargs: dict[str, Any]) -> AnyTokenizer:
-        return await self.engine.get_tokenizer(
-            adapter_kwargs.get("lora_request"),
-        )
+        if _has_argument(self.engine.get_tokenizer, "lora_request"):
+            # vllm<0.11.0
+            return await self.engine.get_tokenizer(
+                adapter_kwargs.get("lora_request"),
+            )
+
+        if adapter_kwargs:
+            warnings.warn(
+                "passed adapter_kwargs to _get_tokenizer is ignored in vllm>=0.11.0",
+                stacklevel=2,
+            )
+        return await self.engine.get_tokenizer()
 
     @staticmethod
     def _convert_reason(
