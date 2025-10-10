@@ -40,7 +40,7 @@ async def test_lora_adapter(vllm_model_handler):
             [
                 LoRARequest(
                     lora_name=adapter_name,
-                    lora_int_id=0,
+                    lora_int_id=42,
                     lora_path=lora_path,
                 ),
             ],
@@ -82,14 +82,14 @@ async def test_lora_adapters_are_cached_remotely(vllm_model_handler):
             [
                 LoRARequest(
                     lora_name=adapter_name,
-                    lora_int_id=0,
+                    lora_int_id=42,
                     lora_path=lora_path,
                 ),
             ],
             [
                 LoRARequest(
                     lora_name=adapter_name,
-                    lora_int_id=0,
+                    lora_int_id=42,
                     lora_path=lora_path,
                 ),
             ],
