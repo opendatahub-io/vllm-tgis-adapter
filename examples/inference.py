@@ -233,6 +233,7 @@ if __name__ == "__main__":
     client = GrpcClient(
         host,
         port,
+        insecure=True,
         verify=False,
     )
 
