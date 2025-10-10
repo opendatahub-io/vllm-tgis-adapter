@@ -85,6 +85,7 @@ addopts = "-ra -k \"not hf_data\""
 markers = [
   "hf_data: marks tests that download data from HF hub (deselect with '-m \"not hf_data\"')"
 ]
+asyncio_default_fixture_loop_scope = "session"
 
 [tool.coverage.run]
 branch = true
