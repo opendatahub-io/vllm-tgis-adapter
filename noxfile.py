@@ -25,7 +25,11 @@ def install_vllm_if_overridden(session: nox.Session) -> None:
 def tests(session: nox.Session) -> None:
     install_vllm_if_overridden(session)
 
-    session.install(".[tests]")
+    deps = [".[tests]"]
+    if os.getenv("CI"):
+        deps.append("pytest-github-actions-annotate-failures")
+
+    session.install(*deps)
 
     # Re-install vllm since `.[tests]` brings in
     # overrides that may bring the vllm version down.
