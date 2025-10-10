@@ -15,6 +15,7 @@ from grpc import StatusCode, aio
 from grpc._cython.cygrpc import AbortError
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
+from vllm import __version_tuple__ as vllm_version
 from vllm.entrypoints.openai.serving_completion import merge_async_iterators
 from vllm.inputs import TokensPrompt, token_inputs
 from vllm.sampling_params import RequestOutputKind, SamplingParams
@@ -26,12 +27,12 @@ from vllm.tracing import (
 
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import logs
-from vllm_tgis_adapter.tgis_utils.guided_decoding import (
-    get_guided_decoding_params,
-)
 from vllm_tgis_adapter.tgis_utils.logits_processors import (
     ExpDecayLengthPenaltyWarper,
     TypicalLogitsWarperWrapper,
+)
+from vllm_tgis_adapter.tgis_utils.structured_outputs import (
+    get_structured_output_params,
 )
 from vllm_tgis_adapter.utils import to_list
 
@@ -574,8 +575,12 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
             )
 
         sampling_params_kwargs: dict[str, Any] = {}
-        if guided_decoding_param := get_guided_decoding_params(decoding):
-            sampling_params_kwargs["guided_decoding"] = guided_decoding_param
+        if structured_output_params := get_structured_output_params(decoding):
+            sampling_params_kwargs[
+                "structured_outputs"
+                if vllm_version >= (0, 11, 0)
+                else "guided_decoding"
+            ] = structured_output_params
 
         time_limit_millis = stopping.time_limit_millis
         deadline = (

@@ -9,7 +9,7 @@ from vllm_tgis_adapter.grpc.pb.generation_pb2 import DecodingParameters
 from .utils import GrpcClient
 
 if TYPE_CHECKING:
-    from vllm.sampling_params import GuidedDecodingParams
+    from vllm.sampling_params import StructuredOutputsParams
 
 
 simplified_sql_grammar = """
@@ -212,20 +212,23 @@ def test_guided_decoding_request(
     spy.assert_called_once()
     spied_sampling_params = spy.call_args.kwargs["sampling_params"]
 
-    spied_decoding_params: GuidedDecodingParams = spied_sampling_params.guided_decoding
+    spied_params: StructuredOutputsParams = (
+        spied_sampling_params.structured_outputs
+        if vllm_version >= (0, 11, 0)
+        else spied_sampling_params.guided_decoding
+    )
     if decoding_params.format == DecodingParameters.ResponseFormat.JSON:
-        assert spied_decoding_params.json_object
+        assert spied_params.json_object
     elif decoding_params.json_schema:
-        assert spied_decoding_params.json == decoding_params.json_schema
+        assert spied_params.json == decoding_params.json_schema
     elif decoding_params.regex:
-        assert spied_decoding_params.regex == decoding_params.regex
+        assert spied_params.regex == decoding_params.regex
     elif decoding_params.choice:
         # choices are converted to a grammar
         assert all(
-            value in spied_decoding_params.grammar
-            for value in decoding_params.choice.choices
+            value in spied_params.grammar for value in decoding_params.choice.choices
         )
     elif decoding_params.grammar:
-        assert spied_decoding_params.grammar == decoding_params.grammar
+        assert spied_params.grammar == decoding_params.grammar
     else:
         raise ValueError
