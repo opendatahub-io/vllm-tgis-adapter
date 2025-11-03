@@ -38,8 +38,13 @@ jobs:
         vllm_ref:
           - "v0.10.0"
           - "v0.10.1.1"
-          - "v0.10.2" # vllm CPU isolated builds are broken from 0.10.0 until 0.10.2, hence the need for a custom build step (see below)
-          - "v0.11.0" # starting from v0.11.0, vllm isolated builds work again
+          # vllm CPU isolated builds are broken from 0.10.0 until 0.10.2, due to differing
+          # torch versions in `pyproject.toml` vs `requirements/cpu.txt`.
+          # A workaround is to set UV_OVERRIDES=requirements/cpu.txt to force using
+          # the torch version cpu requires rather than the one specified in
+          # `pyproject.toml:build-system.requires`
+          - "v0.10.2"
+          - "v0.11.0"
           - "v0.11.2"
 
     steps:
@@ -103,22 +108,12 @@ jobs:
           ref: ${{ matrix.vllm_ref }}
           path: vllm
 
-      - name: Build vllm # only required for CPU builds with vllm<0.11.0
+      - name: Setup environment for CPU build
         run: |
-          cd vllm
-
-          uv venv .venv
-          source .venv/bin/activate
-
-          $GITHUB_WORKSPACE/.github/scripts/install_vllm_build_deps.py
-
-          python setup.py bdist_wheel
-
-      - name: Set vllm version override env var
-        run: |
-          vllm_wheel="$(find vllm/dist -name '*.whl' -exec realpath {} \;)"
-
-          echo "VLLM_VERSION_OVERRIDE=$vllm_wheel" | tee -a "$GITHUB_ENV"
+          echo "UV_CONSTRAINT=vllm/requirements/cpu.txt" | tee -a "$GITHUB_ENV"
+          echo "VLLM_VERSION_OVERRIDE=git+https://github.com/${VLLM_REPO}@${VLLM_REF}" | tee -a "$GITHUB_ENV"
+        env:
+          VLLM_REF: ${{ matrix.vllm_ref }}
 
       - name: Run tests
         run: nox --envdir ~/.nox --reuse-venv=yes -v -s tests-${{ matrix.pyv }} -- --cov-report=xml
