@@ -35,6 +35,7 @@ dependencies = [
   "accelerate==1.7.0",
   "hf-transfer==0.1.9",
   "cachetools~=5.5"
+  "protobuf==6.32.1; platform_machine == 's390x'",
 ]
 
 [project.urls]
