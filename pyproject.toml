@@ -3,7 +3,8 @@ requires = [
   "setuptools>=48",
   "setuptools_scm[toml]>=6.3.1",
   # protobuf-generation tools
-  "grpcio-tools==1.75.1",
+  "grpcio-tools==1.75.1; platform_machine != 's390x'",
+  "grpcio-tools==1.62.1; platform_machine == 's390x'",
   "mypy-protobuf==3.6.0",
   "types-protobuf>=3.20.4"
 ]
@@ -28,12 +29,18 @@ dynamic = ["version"]
 dependencies = [
   "vllm>=0.10.0",
   "prometheus_client==0.21.1",
-  "grpcio==1.75.1",
-  "grpcio-health-checking==1.75.1",
-  "grpcio-reflection==1.75.1",
+  "grpcio==1.75.1; platform_machine != 's390x'",
+  "grpcio-health-checking==1.75.1; platform_machine != 's390x'",
+  "grpcio-reflection==1.75.1; platform_machine != 's390x'",
   "accelerate==1.7.0",
   "hf-transfer==0.1.9",
   "cachetools~=5.5"
+  
+  # gRPC stack (only for s390x)
+  "grpcio==1.62.1; platform_machine == 's390x'",
+  "grpcio-health-checking==1.62.1; platform_machine == 's390x'",
+  "grpcio-reflection==1.62.1; platform_machine == 's390x'",
+  "protobuf==4.25.8; platform_machine == 's390x'",
 ]
 
 [project.urls]
