@@ -34,8 +34,8 @@ dependencies = [
   "grpcio-reflection==1.75.1",
   "accelerate==1.7.0",
   "hf-transfer==0.1.9",
-  "cachetools~=5.5"
-  "protobuf==6.32.1; platform_machine == 's390x'",
+  "cachetools~=5.5",
+  "protobuf==6.32.1; platform_machine == 's390x'"
 ]
 
 [project.urls]
