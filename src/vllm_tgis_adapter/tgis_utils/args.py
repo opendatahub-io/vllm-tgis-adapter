@@ -3,7 +3,23 @@ from __future__ import annotations
 import argparse
 import os
 
-from vllm.utils import FlexibleArgumentParser, StoreBoolean
+try:
+    from vllm.utils.argparse_utils import FlexibleArgumentParser
+
+    class StoreBoolean(argparse.Action):  # vllm v0.11.1 implementation
+        def __call__(self, parser, namespace, values, option_string=None):  # noqa: ARG002,ANN001
+            if values.lower() == "true":
+                setattr(namespace, self.dest, True)
+            elif values.lower() == "false":
+                setattr(namespace, self.dest, False)
+            else:
+                raise ValueError(
+                    f"Invalid boolean value: {values}. Expected 'true' or 'false'."
+                )
+
+except ImportError:
+    # vllm < 0.11.1
+    from vllm.utils import FlexibleArgumentParser, StoreBoolean
 
 from vllm_tgis_adapter.grpc.validation import MAX_TOP_N_TOKENS
 from vllm_tgis_adapter.logging import init_logger
