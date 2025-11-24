@@ -3,10 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vllm.utils import FlexibleArgumentParser
-
 from vllm_tgis_adapter.logging import init_logger
 from vllm_tgis_adapter.tgis_utils import hub
+from vllm_tgis_adapter.tgis_utils.args import FlexibleArgumentParser
 
 logger = init_logger(__name__)
 

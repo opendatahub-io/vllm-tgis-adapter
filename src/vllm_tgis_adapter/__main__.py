@@ -14,14 +14,18 @@ from vllm.entrypoints.openai.api_server import (
     create_server_socket,
 )
 from vllm.entrypoints.openai.cli_args import make_arg_parser
-from vllm.utils import FlexibleArgumentParser
 
 from vllm_tgis_adapter.tgis_utils.logs import add_logging_wrappers
 
 from .grpc import run_grpc_server
 from .http import build_http_server, run_http_server
 from .logging import DEFAULT_LOGGER_NAME, init_logger
-from .tgis_utils.args import EnvVarArgumentParser, add_tgis_args, postprocess_tgis_args
+from .tgis_utils.args import (
+    EnvVarArgumentParser,
+    FlexibleArgumentParser,
+    add_tgis_args,
+    postprocess_tgis_args,
+)
 from .utils import check_for_failed_tasks, write_termination_log
 
 if TYPE_CHECKING:

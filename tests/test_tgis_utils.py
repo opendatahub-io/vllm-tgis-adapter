@@ -1,10 +1,11 @@
 import sys
 
 import pytest
-from vllm.utils import FlexibleArgumentParser, StoreBoolean
 
 from vllm_tgis_adapter.tgis_utils.args import (
     EnvVarArgumentParser,
+    FlexibleArgumentParser,
+    StoreBoolean,
     _bool_from_string,
 )
 
