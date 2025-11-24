@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Annotated, TypeVar
 import pytest
 import requests
 from vllm.entrypoints.openai.cli_args import make_arg_parser
-from vllm.utils import FlexibleArgumentParser
 
 from vllm_tgis_adapter.__main__ import run_and_catch_termination_cause, start_servers
 from vllm_tgis_adapter.grpc.grpc_server import TextGenerationService
 from vllm_tgis_adapter.healthcheck import health_check
 from vllm_tgis_adapter.tgis_utils.args import (
     EnvVarArgumentParser,
+    FlexibleArgumentParser,
     add_tgis_args,
     postprocess_tgis_args,
 )

@@ -3,7 +3,11 @@ from __future__ import annotations
 import argparse
 import os
 
-from vllm.utils import FlexibleArgumentParser, StoreBoolean
+try:
+    from vllm.utils.argparse_utils import FlexibleArgumentParser, StoreBoolean
+except ImportError:
+    # vllm <= 0.11.1
+    from vllm.utils import FlexibleArgumentParser, StoreBoolean
 
 from vllm_tgis_adapter.grpc.validation import MAX_TOP_N_TOKENS
 from vllm_tgis_adapter.logging import init_logger
