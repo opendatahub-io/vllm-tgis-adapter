@@ -51,7 +51,7 @@ text-generation-server = "vllm_tgis_adapter.tgis_utils.scripts:cli"
 tests = [
   "pytest==8.3.5",
   "pytest-cov==6.0.0",
-  "pytest-mock==3.14.0",
+  "pytest-mock==3.15.1",
   "pytest-asyncio==0.25.3",
   "requests==2.32.3"
 ]
