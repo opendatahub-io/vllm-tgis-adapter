@@ -22,6 +22,21 @@ TIMEOUT_KEEP_ALIVE = 5  # seconds
 logger = init_logger(__name__)
 
 
+async def set_correlation_id(request: Request, call_next: Callable) -> Response:
+    # If a correlation ID header is set, then use it as the request ID
+    correlation_id = request.headers.get("X-Correlation-ID", None)
+    if correlation_id:
+        # NB: Setting a header here requires using byte arrays and lowercase
+        headers = dict(request.scope["headers"])
+        headers[b"x-request-id"] = correlation_id.encode()
+        request.scope["headers"] = list(headers.items())
+        # Tell the logger that the request ID is the correlation ID for this
+        # request
+        logs.set_correlation_id(correlation_id, correlation_id)
+
+    return await call_next(request)
+
+
 async def build_http_server(
     args: argparse.Namespace,
     engine: AsyncLLMEngine | AsyncEngineClient,
@@ -29,22 +44,11 @@ async def build_http_server(
     # builds the vllm api server so we can pass reference to it
     # within the tgis adapter
 
+    # hack to get the set_correlation_id middleware working on v0.11.2
+    # Trying to register the middleware after `build_app()` has been called
+    # results in `RuntimeError: Cannot add middleware after an application has started`
+    args.middleware.append("vllm_tgis_adapter.http.set_correlation_id")
     app = build_app(args)
-
-    @app.middleware("http")
-    async def set_correlation_id(request: Request, call_next: Callable) -> Response:
-        # If a correlation ID header is set, then use it as the request ID
-        correlation_id = request.headers.get("X-Correlation-ID", None)
-        if correlation_id:
-            # NB: Setting a header here requires using byte arrays and lowercase
-            headers = dict(request.scope["headers"])
-            headers[b"x-request-id"] = correlation_id.encode()
-            request.scope["headers"] = list(headers.items())
-            # Tell the logger that the request ID is the correlation ID for this
-            # request
-            logs.set_correlation_id(correlation_id, correlation_id)
-
-        return await call_next(request)
 
     if hasattr(engine, "get_vllm_config"):
         vllm_config = await engine.get_vllm_config()
