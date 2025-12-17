@@ -193,7 +193,10 @@ class TextGenerationService(generation_pb2_grpc.GenerationServiceServicer):
         self.health_servicer = health_servicer
 
     async def post_init(self) -> None:
-        self.config = await self.engine.get_model_config()
+        if vllm_version >= (0, 11, 2):
+            self.config = self.engine.vllm_config.model_config
+        else:
+            self.config = await self.engine.get_model_config()
         self.health_servicer.set(
             self.SERVICE_NAME,
             health_pb2.HealthCheckResponse.SERVING,
