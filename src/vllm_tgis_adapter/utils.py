@@ -1,4 +1,5 @@
 import asyncio
+import os
 from collections.abc import Iterable, Sequence
 from typing import Optional
 
@@ -19,6 +20,13 @@ def check_for_failed_tasks(tasks: Iterable[asyncio.Task]) -> Optional[asyncio.Ta
 def write_termination_log(msg: str, file: str = "/dev/termination-log") -> None:
     """Write to the termination logfile."""
     # From https://github.com/IBM/text-generation-inference/blob/9388f02d222c0dab695bea1fb595cacdf08d5467/server/text_generation_server/utils/termination.py#L4
+    if not os.path.exists(file):  # noqa: PTH110
+        from .logging import DEFAULT_LOGGER_NAME, init_logger
+
+        logger = init_logger(DEFAULT_LOGGER_NAME)
+        logger.debug("Not writing to termination log %s since it does not exist", file)
+        return
+
     try:
         with open(file, "w") as termination_file:
             termination_file.write(f"{msg}\n")

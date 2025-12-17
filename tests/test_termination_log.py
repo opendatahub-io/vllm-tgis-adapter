@@ -7,6 +7,7 @@ from .utils import TaskFailedError
 def termination_log_fpath(tmp_path, monkeypatch):
     # create termination log before server starts
     temp_file = tmp_path / "termination_log.txt"
+    temp_file.touch()
     monkeypatch.setenv("TERMINATION_LOG_DIR", str(temp_file))
     yield temp_file
     temp_file.unlink(missing_ok=True)
