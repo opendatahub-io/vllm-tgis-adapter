@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Callable
 
+from vllm import __version_tuple__ as vllm_version
 from vllm.entrypoints.launcher import serve_http
 from vllm.entrypoints.openai.api_server import build_app, init_app_state
 from vllm.logger import init_logger
@@ -50,12 +51,16 @@ async def build_http_server(
     args.middleware.append("vllm_tgis_adapter.http.set_correlation_id")
     app = build_app(args)
 
-    if hasattr(engine, "get_vllm_config"):
+    if vllm_version >= (0, 11, 2):
+        vllm_config = engine.vllm_config
+        maybe_coroutine = init_app_state(engine, app.state, args)
+    elif hasattr(engine, "get_vllm_config"):
         vllm_config = await engine.get_vllm_config()
         maybe_coroutine = init_app_state(engine, vllm_config, app.state, args)
     else:
         model_config = await engine.get_model_config()
         maybe_coroutine = init_app_state(engine, model_config, app.state, args)
+
     if inspect.isawaitable(maybe_coroutine):
         await maybe_coroutine
 
