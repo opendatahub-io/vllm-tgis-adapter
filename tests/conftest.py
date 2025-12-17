@@ -77,16 +77,17 @@ def args(  # noqa: PLR0913
     extra_args: list[str] = [*server_args]
 
     adapter_cache_dir = tmp_path_factory.mktemp("adapter_cache")
-    name = request.getfixturevalue("lora_adapter_name")
-    path = request.getfixturevalue("lora_adapter_path")
+    if any("lora" in fixture_name for fixture_name in request.fixturenames):
+        name = request.getfixturevalue("lora_adapter_name")
+        path = request.getfixturevalue("lora_adapter_path")
 
-    extra_args.extend(
-        (
-            "--enable-lora",
-            f"--lora-modules={name}={path}",
-            f"--adapter-cache={adapter_cache_dir}",
+        extra_args.extend(
+            (
+                "--enable-lora",
+                f"--lora-modules={name}={path}",
+                f"--adapter-cache={adapter_cache_dir}",
+            )
         )
-    )
 
     if disable_frontend_multiprocessing:
         extra_args.append("--disable-frontend-multiprocessing")
