@@ -12,6 +12,7 @@ import vllm
 from vllm.entrypoints.openai.api_server import (
     build_async_engine_client,
     create_server_socket,
+    maybe_register_tokenizer_info_endpoint,
 )
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 
@@ -45,6 +46,7 @@ async def start_servers(args: argparse.Namespace) -> None:
 
     tasks: list[asyncio.Task] = []
     async with build_async_engine_client(args) as engine:
+        maybe_register_tokenizer_info_endpoint(args)
         add_logging_wrappers(engine)
 
         vllm_server = await build_http_server(args, engine)
