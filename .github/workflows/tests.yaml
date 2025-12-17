@@ -71,14 +71,14 @@ jobs:
 
       - name: nox envs cache
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /home/runner/.nox
           key: ${{ runner.os }}-python-${{matrix.pyv}}-${{ hashFiles('noxfile.py') }}-${{matrix.vllm_ref}}
 
       - name: hf hub cache
         id: hf-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/huggingface/hub
           key: ${{ runner.os }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Cache ccache cache directory
         id: cache-ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /home/runner/.cache/ccache
           key: ${{ runner.os }}
