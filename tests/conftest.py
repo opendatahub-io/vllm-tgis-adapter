@@ -44,17 +44,6 @@ def lora_adapter_path(request: pytest.FixtureRequest) -> str:
     return path
 
 
-@pytest.fixture(
-    params=[
-        # pytest.param(True, id="disable-frontend-multiprocessing=True"),
-        pytest.param(False, id="disable-frontend-multiprocessing=False"),
-    ]
-)
-def disable_frontend_multiprocessing(request):
-    """Enable or disable the frontend-multiprocessing feature."""
-    return request.param
-
-
 @pytest.fixture
 def server_args(request: pytest.FixtureRequest):
     return request.param if hasattr(request, "param") else []
@@ -66,7 +55,6 @@ def args(  # noqa: PLR0913
     monkeypatch,
     grpc_server_port: ArgFixture[int],
     http_server_port: ArgFixture[int],
-    disable_frontend_multiprocessing,
     server_args: ArgFixture[list[str]],
     tmp_path_factory,
 ) -> argparse.Namespace:
@@ -88,9 +76,6 @@ def args(  # noqa: PLR0913
                 f"--adapter-cache={adapter_cache_dir}",
             )
         )
-
-    if disable_frontend_multiprocessing:
-        extra_args.append("--disable-frontend-multiprocessing")
 
     monkeypatch.setattr(
         sys,
