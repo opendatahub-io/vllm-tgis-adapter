@@ -49,7 +49,7 @@ text-generation-server = "vllm_tgis_adapter.tgis_utils.scripts:cli"
 
 [project.optional-dependencies]
 tests = [
-  "pytest==8.3.5",
+  "pytest==8.4.2",
   "pytest-cov==6.0.0",
   "pytest-mock==3.14.0",
   "pytest-asyncio==0.25.3",
