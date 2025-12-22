@@ -3,7 +3,7 @@ requires = [
   "setuptools>=48",
   "setuptools_scm[toml]>=6.3.1",
   # protobuf-generation tools
-  "grpcio-tools==1.75.1",
+  "grpcio-tools==1.76.0",
   "protobuf==6.32.1; platform_machine == 's390x'",
   "mypy-protobuf==3.6.0",
   "types-protobuf>=3.20.4"
